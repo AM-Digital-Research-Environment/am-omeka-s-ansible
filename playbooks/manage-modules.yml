@@ -3,14 +3,12 @@
 # Install extra modules for an instance
 #
 # Modules are installed by the container entrypoint via EXTRA_MODULES env var.
-# This playbook updates the .env file and recreates the PHP container.
+# This playbook rewrites the .env file (using copy, not lineinfile) and
+# recreates the PHP container.
 #
 # Usage:
 #   ansible-playbook playbooks/manage-modules.yml \
 #     -e "instance=test-instance modules=CSSEditor,AdvancedSearch"
-#
-# Supports module short names (CSSEditor) or full format (CSSEditor:omeka-s-modules/CSSEditor:master)
-# Dependencies are resolved automatically by the entrypoint.
 # =============================================================================
 
 - name: Install Omeka S modules
@@ -50,22 +48,34 @@
         src: "{{ _instance_dir }}/.env"
       register: _current_env
 
-    - name: Update EXTRA_MODULES in .env
-      ansible.builtin.lineinfile:
-        path: "{{ _instance_dir }}/.env"
-        regexp: "^EXTRA_MODULES="
-        line: "EXTRA_MODULES={{ _all_extra_modules | join(',') }}"
-        state: present
+    - name: Parse current .env content
+      ansible.builtin.set_fact:
+        _env_lines: "{{ (_current_env.content | b64decode).split('\n') }}"
+
+    - name: Build updated .env content
+      ansible.builtin.set_fact:
+        _updated_env: |
+          {% set found = {'extra_modules': false} %}
+          {% for line in _env_lines %}
+          {% if line.startswith('EXTRA_MODULES=') %}
+          EXTRA_MODULES={{ _all_extra_modules | join(',') }}
+          {% set _ = found.update({'extra_modules': true}) %}
+          {% elif line | trim | length > 0 %}
+          {{ line }}
+          {% endif %}
+          {% endfor %}
+          {% if not found.extra_modules %}
+          EXTRA_MODULES={{ _all_extra_modules | join(',') }}
+          {% endif %}
+
+    - name: Write updated .env file
+      ansible.builtin.copy:
+        content: "{{ _updated_env | regex_replace('\\n\\n+', '\\n') }}"
+        dest: "{{ _instance_dir }}/.env"
+        mode: "0600"
       register: _env_updated
 
-    - name: Insert EXTRA_MODULES if not present
-      ansible.builtin.lineinfile:
-        path: "{{ _instance_dir }}/.env"
-        line: "EXTRA_MODULES={{ _all_extra_modules | join(',') }}"
-        state: present
-      when: "'EXTRA_MODULES' not in (_current_env.content | b64decode)"
-
-    - name: Recreate PHP container to trigger module installation
+    - name: Recreate containers to trigger module installation
       community.docker.docker_compose_v2:
         project_src: "{{ _instance_dir }}"
         state: present
@@ -73,7 +83,6 @@
         recreate: always
         wait: true
         wait_timeout: 300
-      become: true
       when: _env_updated is changed
 
     - name: Wait for instance to be healthy
