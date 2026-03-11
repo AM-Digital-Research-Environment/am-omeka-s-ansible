@@ -50,7 +50,7 @@
       ansible.builtin.unarchive:
         src: "https://github.com/{{ _mod_repo }}/archive/refs/heads/{{ _mod_branch }}.zip"
         dest: "{{ _vol_modules_path }}"
-        remote_src: false
+        remote_src: true
       become: true
       register: _mod_extract
       ignore_errors: true
@@ -59,7 +59,7 @@
       ansible.builtin.unarchive:
         src: "https://github.com/{{ _mod_repo }}/archive/refs/tags/{{ _mod_branch }}.zip"
         dest: "{{ _vol_modules_path }}"
-        remote_src: false
+        remote_src: true
       become: true
       when: _mod_extract is failed
 
