@@ -1,0 +1,10 @@
+---
+# =============================================================================
+# Per-instance secrets — encrypt with: ansible-vault encrypt vault.yml
+# =============================================================================
+
+omeka_instance_secrets:
+  archives-main:
+    mysql_password: "CHANGE_ME_archives_main"
+  library-digital:
+    mysql_password: "CHANGE_ME_library_digital"

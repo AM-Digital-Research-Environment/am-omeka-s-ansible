@@ -1,0 +1,3 @@
+---
+caddy_config_path: /etc/caddy/Caddyfile
+caddy_log_dir: /var/log/caddy

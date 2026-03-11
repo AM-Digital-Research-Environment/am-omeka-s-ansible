@@ -1,0 +1,43 @@
+---
+- name: Create deploy group
+  ansible.builtin.group:
+    name: "{{ deploy_group }}"
+    state: present
+  become: true
+
+- name: Create deploy user
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+  become: true
+
+- name: Add deploy user to sudo with NOPASSWD
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+  become: true
+
+- name: Create .ssh directory for deploy user
+  ansible.builtin.file:
+    path: "/home/{{ deploy_user }}/.ssh"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: "0700"
+  become: true
+
+- name: Set authorized_keys for deploy user
+  ansible.posix.authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ item }}"
+    state: present
+  loop: "{{ deploy_ssh_keys }}"
+  become: true
+  when: deploy_ssh_keys | length > 0

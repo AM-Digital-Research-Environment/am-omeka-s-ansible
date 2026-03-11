@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Omeka S instance backup script.
+# Usage: omeka-backup.sh <instance_name>
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Variables
+# ---------------------------------------------------------------------------
+INSTANCE_NAME="${1:?Usage: omeka-backup.sh <instance_name>}"
+INSTANCE_DIR="{{ omeka_instances_dir }}/${INSTANCE_NAME}"
+BACKUP_DIR="{{ backup_base_dir }}/${INSTANCE_NAME}"
+TIMESTAMP="$(date +%Y-%m-%d_%H%M%S)"
+RETENTION_DAYS="{{ backup_retention_days }}"
+REMOTE_ENABLED="{{ backup_remote_enabled | lower }}"
+REMOTE_DEST="{{ backup_remote_dest }}"
+REMOTE_METHOD="{{ backup_remote_method }}"
+
+LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')] [${INSTANCE_NAME}]"
+
+log()  { echo "${LOG_PREFIX} $*"; }
+fail() { echo "${LOG_PREFIX} ERROR: $*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Sanity checks
+# ---------------------------------------------------------------------------
+[[ -d "${INSTANCE_DIR}" ]] || fail "Instance directory not found: ${INSTANCE_DIR}"
+[[ -d "${BACKUP_DIR}" ]]   || fail "Backup directory not found: ${BACKUP_DIR}"
+[[ -f "${INSTANCE_DIR}/.env" ]] || fail ".env file not found for instance ${INSTANCE_NAME}"
+
+# ---------------------------------------------------------------------------
+# Read MySQL password from the instance .env file
+# ---------------------------------------------------------------------------
+MYSQL_PASS="$(grep -E '^MYSQL_PASSWORD=' "${INSTANCE_DIR}/.env" | cut -d'=' -f2-)"
+[[ -n "${MYSQL_PASS}" ]] || fail "MYSQL_PASSWORD not found in ${INSTANCE_DIR}/.env"
+
+log "Starting backup..."
+
+# ---------------------------------------------------------------------------
+# Database dump
+# ---------------------------------------------------------------------------
+log "Dumping database..."
+if docker compose -f "${INSTANCE_DIR}/docker-compose.yml" exec -T db \
+     mysqldump -u omeka -p"${MYSQL_PASS}" omeka \
+     | gzip > "${BACKUP_DIR}/db_${TIMESTAMP}.sql.gz"; then
+  log "Database dump complete: db_${TIMESTAMP}.sql.gz"
+else
+  fail "Database dump failed"
+fi
+
+# ---------------------------------------------------------------------------
+# Files volume backup
+# ---------------------------------------------------------------------------
+log "Backing up files volume..."
+
+# Identify the Docker Compose project volume for omeka files
+VOLUME_NAME="$(docker compose -f "${INSTANCE_DIR}/docker-compose.yml" config --volumes \
+  | grep -E 'omeka_files|files' | head -n1)"
+
+if [[ -z "${VOLUME_NAME}" ]]; then
+  fail "Could not identify files volume from docker-compose config"
+fi
+
+# Resolve the full volume name (project prefix + volume name)
+PROJECT_NAME="$(basename "${INSTANCE_DIR}")"
+FULL_VOLUME="${PROJECT_NAME}_${VOLUME_NAME}"
+
+if docker run --rm \
+     -v "${FULL_VOLUME}":/data:ro \
+     -v "${BACKUP_DIR}":/backup \
+     alpine tar czf "/backup/files_${TIMESTAMP}.tar.gz" -C /data .; then
+  log "Files backup complete: files_${TIMESTAMP}.tar.gz"
+else
+  fail "Files volume backup failed"
+fi
+
+# ---------------------------------------------------------------------------
+# Cleanup old backups beyond retention
+# ---------------------------------------------------------------------------
+log "Cleaning backups older than ${RETENTION_DAYS} days..."
+find "${BACKUP_DIR}" -type f \( -name '*.sql.gz' -o -name '*.tar.gz' \) \
+  -mtime "+${RETENTION_DAYS}" -delete
+
+# ---------------------------------------------------------------------------
+# Optional remote sync
+# ---------------------------------------------------------------------------
+if [[ "${REMOTE_ENABLED}" == "true" && -n "${REMOTE_DEST}" ]]; then
+  log "Syncing backups to remote destination: ${REMOTE_DEST}"
+  case "${REMOTE_METHOD}" in
+    rsync)
+      rsync -az --delete "${BACKUP_DIR}/" "${REMOTE_DEST}/${INSTANCE_NAME}/"
+      ;;
+    rclone)
+      rclone sync "${BACKUP_DIR}/" "${REMOTE_DEST}/${INSTANCE_NAME}/"
+      ;;
+    *)
+      log "WARNING: Unknown remote method '${REMOTE_METHOD}', skipping remote sync"
+      ;;
+  esac
+  log "Remote sync complete"
+fi
+
+log "Backup finished successfully"

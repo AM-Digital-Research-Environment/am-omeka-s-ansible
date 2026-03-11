@@ -1,0 +1,26 @@
+---
+# roles/omeka_instance/defaults/main.yml
+# Defaults for the omeka_instance role — all can be overridden.
+
+omeka_docker_repo: "https://github.com/AM-Digital-Research-Environment/am-omeka-s-docker-bootstrap.git"
+omeka_docker_branch: "main"
+
+omeka_base_dir: "/opt/omeka-s"
+omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+
+deploy_user: "deploy"
+deploy_group: "deploy"
+
+# Default Omeka S version if not specified per-instance
+omeka_default_version: "4.1.1"
+
+# PHP-FPM pool defaults
+php_pm_max_children: 5
+php_pm_start_servers: 2
+php_pm_min_spare_servers: 1
+php_pm_max_spare_servers: 3
+php_pm_max_requests: 500
+
+# Healthcheck settings
+healthcheck_retries: 18
+healthcheck_delay: 10

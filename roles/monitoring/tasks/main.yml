@@ -1,0 +1,30 @@
+---
+- name: Install mailutils for email alerts
+  ansible.builtin.apt:
+    name: mailutils
+    state: present
+    update_cache: true
+  become: true
+  when: monitoring_alert_email | length > 0
+
+- name: Template health check script
+  ansible.builtin.template:
+    src: omeka-health-check.sh.j2
+    dest: /usr/local/bin/omeka-health-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Set up cron job for health checks
+  ansible.builtin.cron:
+    name: "Omeka S health check"
+    job: "/usr/local/bin/omeka-health-check.sh >> {{ monitoring_log_file }} 2>&1"
+    minute: "{{ monitoring_check_interval.split(' ')[0] }}"
+    hour: "{{ monitoring_check_interval.split(' ')[1] }}"
+    day: "{{ monitoring_check_interval.split(' ')[2] }}"
+    month: "{{ monitoring_check_interval.split(' ')[3] }}"
+    weekday: "{{ monitoring_check_interval.split(' ')[4] }}"
+    user: root
+    state: present
+  become: true

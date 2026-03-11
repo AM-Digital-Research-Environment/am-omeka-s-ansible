@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Omeka S Health Check Script
+# Managed by Ansible - do not edit manually
+
+set -euo pipefail
+
+LOG_FILE="{{ monitoring_log_file }}"
+DISK_THRESHOLD="{{ monitoring_disk_threshold }}"
+ALERT_EMAIL="{{ monitoring_alert_email }}"
+TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
+FAILURES=""
+OVERALL_EXIT=0
+
+log() {
+    echo "[${TIMESTAMP}] $1" >> "${LOG_FILE}"
+}
+
+log "===== Health check started ====="
+
+{% for instance_name, instance_config in omeka_instances.items() %}
+# --- Instance: {{ instance_name }} ---
+INSTANCE_NAME="{{ instance_name }}"
+INSTANCE_DIR="{{ omeka_instances_dir }}/{{ instance_name }}"
+INSTANCE_PORT="{{ instance_config.nginx_port }}"
+INSTANCE_OK=true
+
+log "Checking instance: ${INSTANCE_NAME}"
+
+# Check Docker containers are running
+if cd "${INSTANCE_DIR}" && docker compose ps --status running --format '{% raw %}{{.Name}}{% endraw %}' 2>/dev/null | grep -q .; then
+    RUNNING_COUNT=$(docker compose ps --status running --format '{% raw %}{{.Name}}{% endraw %}' 2>/dev/null | wc -l)
+    TOTAL_COUNT=$(docker compose ps --format '{% raw %}{{.Name}}{% endraw %}' 2>/dev/null | wc -l)
+    if [ "${RUNNING_COUNT}" -lt "${TOTAL_COUNT}" ]; then
+        log "FAIL [${INSTANCE_NAME}] Not all containers running: ${RUNNING_COUNT}/${TOTAL_COUNT}"
+        FAILURES="${FAILURES}\n[${INSTANCE_NAME}] Not all containers running: ${RUNNING_COUNT}/${TOTAL_COUNT}"
+        INSTANCE_OK=false
+    else
+        log "OK   [${INSTANCE_NAME}] All ${TOTAL_COUNT} containers running"
+    fi
+else
+    log "FAIL [${INSTANCE_NAME}] No running containers found"
+    FAILURES="${FAILURES}\n[${INSTANCE_NAME}] No running containers found"
+    INSTANCE_OK=false
+fi
+
+# Check HTTP response
+HTTP_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:${INSTANCE_PORT}" 2>/dev/null || echo "000")
+if [ "${HTTP_STATUS}" -ge 200 ] && [ "${HTTP_STATUS}" -lt 400 ]; then
+    log "OK   [${INSTANCE_NAME}] HTTP status: ${HTTP_STATUS}"
+else
+    log "FAIL [${INSTANCE_NAME}] HTTP status: ${HTTP_STATUS}"
+    FAILURES="${FAILURES}\n[${INSTANCE_NAME}] HTTP check failed with status: ${HTTP_STATUS}"
+    INSTANCE_OK=false
+fi
+
+# Check disk usage
+DISK_USAGE=$(df "${INSTANCE_DIR}" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')
+if [ -n "${DISK_USAGE}" ] && [ "${DISK_USAGE}" -gt "${DISK_THRESHOLD}" ]; then
+    log "FAIL [${INSTANCE_NAME}] Disk usage at ${DISK_USAGE}% (threshold: ${DISK_THRESHOLD}%)"
+    FAILURES="${FAILURES}\n[${INSTANCE_NAME}] Disk usage at ${DISK_USAGE}% (threshold: ${DISK_THRESHOLD}%)"
+    INSTANCE_OK=false
+else
+    log "OK   [${INSTANCE_NAME}] Disk usage at ${DISK_USAGE}%"
+fi
+
+if [ "${INSTANCE_OK}" = false ]; then
+    OVERALL_EXIT=1
+fi
+
+{% endfor %}
+
+# Send email alert if there were failures and an alert email is configured
+if [ -n "${FAILURES}" ] && [ -n "${ALERT_EMAIL}" ]; then
+    SUBJECT="[Omeka S Alert] Health check failures on $(hostname)"
+    BODY="Health check failures detected at ${TIMESTAMP}:\n${FAILURES}"
+    echo -e "${BODY}" | mail -s "${SUBJECT}" "${ALERT_EMAIL}"
+    log "Alert email sent to ${ALERT_EMAIL}"
+fi
+
+log "===== Health check completed (exit: ${OVERALL_EXIT}) ====="
+
+exit ${OVERALL_EXIT}

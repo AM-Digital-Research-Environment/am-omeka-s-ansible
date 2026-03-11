@@ -1,0 +1,12 @@
+---
+# roles/omeka_instance/tasks/configure.yml
+# Template the .env file for the instance.
+
+- name: "{{ instance_name }} | Template .env file"
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ omeka_instances_dir }}/{{ instance_name }}/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: "0600"
+  notify: restart omeka instance

@@ -1,0 +1,32 @@
+# Ansible vault password file
+.vault_pass
+vault_pass.txt
+
+# Retry files
+*.retry
+
+# Inventory secrets (encrypted files are OK, but be safe)
+# vault.yml files are committed (they're encrypted), but plaintext secrets are not
+*.secret
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,14 @@
+---
+# roles/omeka_instance/tasks/healthcheck.yml
+# Wait for the Omeka S instance to become responsive.
+
+- name: "{{ instance_name }} | Wait for instance to respond"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ instance_config.nginx_port }}"
+    method: GET
+    status_code: [200, 302]
+  register: healthcheck_result
+  until: healthcheck_result is succeeded
+  retries: "{{ healthcheck_retries }}"
+  delay: "{{ healthcheck_delay }}"
+  timeout: 180

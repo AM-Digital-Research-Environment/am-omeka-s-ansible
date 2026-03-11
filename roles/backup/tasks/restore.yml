@@ -1,0 +1,116 @@
+---
+# roles/backup/tasks/restore.yml
+# Restores an Omeka S instance from a backup.
+# Required variables:
+#   - instance_name: name of the instance to restore
+#   - backup_date: timestamp of the backup (e.g. 2026-03-10_020001)
+
+- name: "{{ instance_name }} | Validate restore variables"
+  ansible.builtin.assert:
+    that:
+      - instance_name is defined
+      - backup_date is defined
+    fail_msg: "Both 'instance_name' and 'backup_date' must be defined for restore"
+
+- name: "{{ instance_name }} | Set restore path variables"
+  ansible.builtin.set_fact:
+    _restore_instance_dir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    _restore_backup_dir: "{{ backup_base_dir }}/{{ instance_name }}"
+    _restore_db_file: "{{ backup_base_dir }}/{{ instance_name }}/db_{{ backup_date }}.sql.gz"
+    _restore_files_file: "{{ backup_base_dir }}/{{ instance_name }}/files_{{ backup_date }}.tar.gz"
+
+- name: "{{ instance_name }} | Verify database backup file exists"
+  ansible.builtin.stat:
+    path: "{{ _restore_db_file }}"
+  register: _db_backup_stat
+
+- name: "{{ instance_name }} | Verify files backup file exists"
+  ansible.builtin.stat:
+    path: "{{ _restore_files_file }}"
+  register: _files_backup_stat
+
+- name: "{{ instance_name }} | Fail if backup files are missing"
+  ansible.builtin.assert:
+    that:
+      - _db_backup_stat.stat.exists
+      - _files_backup_stat.stat.exists
+    fail_msg: >-
+      Backup files not found for {{ instance_name }} at date {{ backup_date }}.
+      Expected: {{ _restore_db_file }} and {{ _restore_files_file }}
+
+- name: "{{ instance_name }} | Read MYSQL_PASSWORD from .env"
+  ansible.builtin.shell:
+    cmd: grep -E '^MYSQL_PASSWORD=' "{{ _restore_instance_dir }}/.env" | cut -d'=' -f2-
+  register: _mysql_pass
+  changed_when: false
+  no_log: true
+
+- name: "{{ instance_name }} | Stop instance containers"
+  ansible.builtin.shell:
+    cmd: docker compose down
+    chdir: "{{ _restore_instance_dir }}"
+  changed_when: true
+
+- name: "{{ instance_name }} | Start only the database container"
+  ansible.builtin.shell:
+    cmd: docker compose up -d db
+    chdir: "{{ _restore_instance_dir }}"
+  changed_when: true
+
+- name: "{{ instance_name }} | Wait for database to be ready"
+  ansible.builtin.shell:
+    cmd: >-
+      docker compose exec -T db
+      mysqladmin ping -u omeka -p"{{ _mysql_pass.stdout }}" --silent
+    chdir: "{{ _restore_instance_dir }}"
+  register: _db_ping
+  retries: 30
+  delay: 2
+  until: _db_ping.rc == 0
+  changed_when: false
+  no_log: true
+
+- name: "{{ instance_name }} | Restore database from backup"
+  ansible.builtin.shell:
+    cmd: >-
+      gunzip -c "{{ _restore_db_file }}"
+      | docker compose exec -T db
+      mysql -u omeka -p"{{ _mysql_pass.stdout }}" omeka
+    chdir: "{{ _restore_instance_dir }}"
+  changed_when: true
+  no_log: true
+
+- name: "{{ instance_name }} | Identify files volume name"
+  ansible.builtin.shell:
+    cmd: >-
+      docker compose config --volumes
+      | grep -E 'omeka_files|files'
+      | head -n1
+    chdir: "{{ _restore_instance_dir }}"
+  register: _volume_name
+  changed_when: false
+
+- name: "{{ instance_name }} | Set full volume name"
+  ansible.builtin.set_fact:
+    _full_volume: "{{ instance_name }}_{{ _volume_name.stdout | trim }}"
+
+- name: "{{ instance_name }} | Restore files volume from backup"
+  ansible.builtin.shell:
+    cmd: >-
+      docker run --rm
+      -v "{{ _full_volume }}":/data
+      -v "{{ _restore_backup_dir }}":/backup:ro
+      alpine sh -c "rm -rf /data/* && tar xzf /backup/files_{{ backup_date }}.tar.gz -C /data"
+  changed_when: true
+
+- name: "{{ instance_name }} | Start all instance containers"
+  ansible.builtin.shell:
+    cmd: docker compose up -d
+    chdir: "{{ _restore_instance_dir }}"
+  changed_when: true
+
+- name: "{{ instance_name }} | Restore complete"
+  ansible.builtin.debug:
+    msg: >-
+      Instance '{{ instance_name }}' restored from backup dated {{ backup_date }}.
+      Verify the instance is running correctly.

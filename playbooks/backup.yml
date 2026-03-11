@@ -1,0 +1,20 @@
+---
+# =============================================================================
+# Run backups for all enabled instances
+# Usage: ansible-playbook playbooks/backup.yml --limit server1
+# =============================================================================
+
+- name: Run Omeka S backups
+  hosts: omeka_servers
+  become: true
+
+  tasks:
+    - name: Run backup for each enabled instance
+      ansible.builtin.shell: |
+        /usr/local/bin/omeka-backup.sh {{ item.key }}
+      loop: "{{ omeka_instances | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value.backup_enabled | default(false)
+      register: backup_result
+      changed_when: backup_result.rc == 0

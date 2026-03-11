@@ -1,0 +1,14 @@
+---
+# roles/omeka_instance/tasks/themes.yml
+# Install extra Omeka S themes into the running instance.
+
+- name: "{{ instance_name }} | Install extra themes"
+  ansible.builtin.shell:
+    cmd: "bash scripts/install-theme.sh {{ item }}"
+    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  loop: "{{ instance_config.extra_themes }}"
+  register: _theme_install
+  changed_when: "'already installed' not in _theme_install.stdout"
+  when:
+    - instance_config.extra_themes is defined
+    - instance_config.extra_themes | length > 0

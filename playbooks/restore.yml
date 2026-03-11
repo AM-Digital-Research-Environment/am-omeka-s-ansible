@@ -1,0 +1,110 @@
+---
+# =============================================================================
+# Restore an instance from backup
+# Usage: ansible-playbook playbooks/restore.yml -e "instance=archives-main backup_date=2026-03-11_020000"
+# =============================================================================
+
+- name: Restore Omeka S instance from backup
+  hosts: omeka_servers
+  become: true
+
+  pre_tasks:
+    - name: Validate parameters
+      ansible.builtin.assert:
+        that:
+          - instance is defined
+          - instance in omeka_instances
+          - backup_date is defined
+        fail_msg: "Required: -e 'instance=<name> backup_date=YYYY-MM-DD_HHMMSS'"
+
+    - name: Set variables
+      ansible.builtin.set_fact:
+        _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+        _backup_dir: "{{ omeka_backups_dir | default(omeka_base_dir + '/backups') }}/{{ instance }}"
+        _db_backup: "db_{{ backup_date }}.sql.gz"
+        _files_backup: "files_{{ backup_date }}.tar.gz"
+
+    - name: Verify backup files exist
+      ansible.builtin.stat:
+        path: "{{ _backup_dir }}/{{ item }}"
+      loop:
+        - "{{ _db_backup }}"
+        - "{{ _files_backup }}"
+      register: backup_files
+      failed_when: not backup_files.stat.exists
+
+  tasks:
+    - name: Stop instance containers
+      ansible.builtin.shell: docker compose down
+      args:
+        chdir: "{{ _instance_dir }}"
+
+    - name: Read MySQL password from .env
+      ansible.builtin.shell: grep '^MYSQL_PASSWORD=' "{{ _instance_dir }}/.env" | cut -d= -f2
+      register: mysql_pass
+      changed_when: false
+      no_log: true
+
+    - name: Start only the database container
+      ansible.builtin.shell: docker compose up -d db
+      args:
+        chdir: "{{ _instance_dir }}"
+
+    - name: Wait for database to be ready
+      ansible.builtin.shell: |
+        docker compose exec -T db mysqladmin ping -u omeka -p"{{ mysql_pass.stdout }}" --silent
+      args:
+        chdir: "{{ _instance_dir }}"
+      register: db_ready
+      until: db_ready.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+      no_log: true
+
+    - name: Restore database from backup
+      ansible.builtin.shell: |
+        gunzip -c "{{ _backup_dir }}/{{ _db_backup }}" | \
+        docker compose exec -T db mysql -u omeka -p"{{ mysql_pass.stdout }}" omeka
+      args:
+        chdir: "{{ _instance_dir }}"
+      no_log: true
+
+    - name: Get omeka_files volume name
+      ansible.builtin.shell: |
+        docker compose config --volumes | grep omeka_files || echo "omeka_files"
+      args:
+        chdir: "{{ _instance_dir }}"
+      register: volume_name
+      changed_when: false
+
+    - name: Get full volume name with project prefix
+      ansible.builtin.shell: |
+        docker volume ls --format '{{ '{{' }}.Name{{ '}}' }}' | grep "{{ instance | regex_replace('-', '') }}.*{{ volume_name.stdout | trim }}" | head -1
+      register: full_volume_name
+      changed_when: false
+
+    - name: Restore files volume from backup
+      ansible.builtin.shell: |
+        docker run --rm \
+          -v "{{ full_volume_name.stdout | trim }}:/data" \
+          -v "{{ _backup_dir }}:/backup:ro" \
+          alpine sh -c "rm -rf /data/* && tar xzf /backup/{{ _files_backup }} -C /data"
+
+    - name: Start all containers
+      ansible.builtin.shell: docker compose up -d
+      args:
+        chdir: "{{ _instance_dir }}"
+
+    - name: Wait for instance to be healthy
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ omeka_instances[instance].nginx_port }}/"
+        status_code: [200, 302]
+      register: health
+      until: health.status in [200, 302]
+      retries: 36
+      delay: 5
+
+    - name: Restore complete
+      ansible.builtin.debug:
+        msg: "Instance '{{ instance }}' restored from backup {{ backup_date }}"

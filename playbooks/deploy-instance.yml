@@ -1,0 +1,33 @@
+---
+# =============================================================================
+# Deploy a single instance
+# Usage: ansible-playbook playbooks/deploy-instance.yml -e "instance=archives-main"
+# =============================================================================
+
+- name: Deploy single Omeka S instance
+  hosts: omeka_servers
+  become: true
+
+  pre_tasks:
+    - name: Validate instance parameter
+      ansible.builtin.assert:
+        that:
+          - instance is defined
+          - instance in omeka_instances
+        fail_msg: >
+          Instance '{{ instance | default("undefined") }}' not found.
+          Available: {{ omeka_instances.keys() | list | join(', ') }}
+
+  tasks:
+    - name: Deploy instance {{ instance }}
+      ansible.builtin.include_role:
+        name: omeka_instance
+      vars:
+        instance_name: "{{ instance }}"
+        instance_config: "{{ omeka_instances[instance] }}"
+        instance_secrets: "{{ omeka_instance_secrets[instance] }}"
+
+    - name: Reload Caddy
+      ansible.builtin.service:
+        name: caddy
+        state: reloaded

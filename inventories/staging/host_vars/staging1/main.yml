@@ -1,0 +1,9 @@
+---
+omeka_instances:
+  test-instance:
+    domain: test.example.edu
+    omeka_version: "4.2.0"
+    nginx_port: 8081
+    extra_modules: []
+    extra_themes: []
+    backup_enabled: false

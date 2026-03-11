@@ -1,0 +1,4 @@
+---
+omeka_instance_secrets:
+  test-instance:
+    mysql_password: "CHANGE_ME_test"

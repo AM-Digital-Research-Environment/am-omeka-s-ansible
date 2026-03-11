@@ -1,0 +1,41 @@
+---
+# =============================================================================
+# Install or update modules for an instance
+# Usage:
+#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main action=install modules=CSVImport,UniversalViewer"
+#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main action=update modules=CSVImport"
+# =============================================================================
+
+- name: Manage Omeka S modules
+  hosts: omeka_servers
+  become: true
+
+  pre_tasks:
+    - name: Validate parameters
+      ansible.builtin.assert:
+        that:
+          - instance is defined
+          - instance in omeka_instances
+          - action is defined
+          - action in ['install', 'update']
+          - modules is defined
+        fail_msg: "Required: -e 'instance=<name> action=install|update modules=Mod1,Mod2'"
+
+    - name: Set instance directory
+      ansible.builtin.set_fact:
+        _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+
+  tasks:
+    - name: "{{ action | capitalize }} modules"
+      ansible.builtin.shell: |
+        bash scripts/{{ (action == 'install') | ternary('install-module.sh', 'update-module.sh') }} {{ item }}
+      args:
+        chdir: "{{ _instance_dir }}"
+      loop: "{{ modules.split(',') }}"
+      loop_control:
+        label: "{{ item }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      register: module_result
+      changed_when: "'installed' in module_result.stdout or 'updated' in module_result.stdout"
+      failed_when: module_result.rc != 0

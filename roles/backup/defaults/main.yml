@@ -1,0 +1,14 @@
+---
+# roles/backup/defaults/main.yml
+# Defaults for the backup role — all can be overridden.
+
+omeka_base_dir: "/opt/omeka-s"
+omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+
+backup_base_dir: "{{ omeka_base_dir }}/backups"
+# Note: omeka_instances (dict) must be supplied by the inventory or playbook.
+backup_retention_days: 30
+
+backup_remote_enabled: false
+backup_remote_dest: ""
+backup_remote_method: "rsync"  # rsync or rclone

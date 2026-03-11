@@ -1,0 +1,57 @@
+---
+# =============================================================================
+# Teardown (remove) an instance — requires confirmation
+# Usage: ansible-playbook playbooks/teardown-instance.yml -e "instance=archives-main confirm_teardown=yes"
+# =============================================================================
+
+- name: Teardown Omeka S instance
+  hosts: omeka_servers
+  become: true
+
+  pre_tasks:
+    - name: Validate parameters
+      ansible.builtin.assert:
+        that:
+          - instance is defined
+          - instance in omeka_instances
+        fail_msg: "Required: -e 'instance=<name>'"
+
+    - name: Require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_teardown is defined
+          - confirm_teardown == "yes"
+        fail_msg: >
+          Teardown requires explicit confirmation.
+          Add: -e "confirm_teardown=yes"
+          WARNING: This will permanently delete instance '{{ instance }}' including all data and Docker volumes.
+
+    - name: Set variables
+      ansible.builtin.set_fact:
+        _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+
+  tasks:
+    - name: Stop and remove containers and volumes
+      ansible.builtin.shell: docker compose down -v
+      args:
+        chdir: "{{ _instance_dir }}"
+      ignore_errors: true
+
+    - name: Remove instance directory
+      ansible.builtin.file:
+        path: "{{ _instance_dir }}"
+        state: absent
+
+    - name: Remove backup cron job
+      ansible.builtin.cron:
+        name: "omeka-backup-{{ instance }}"
+        state: absent
+
+    - name: Reload Caddy (remove domain routing)
+      ansible.builtin.service:
+        name: caddy
+        state: reloaded
+
+    - name: Teardown complete
+      ansible.builtin.debug:
+        msg: "Instance '{{ instance }}' has been removed. Backups in {{ omeka_backups_dir | default(omeka_base_dir + '/backups') }}/{{ instance }}/ were preserved."

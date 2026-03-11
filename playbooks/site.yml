@@ -1,0 +1,11 @@
+---
+# =============================================================================
+# Full convergence — server setup + all instances
+# Usage: ansible-playbook playbooks/site.yml --limit server1
+# =============================================================================
+
+- name: Server setup
+  ansible.builtin.import_playbook: server-setup.yml
+
+- name: Deploy all instances
+  ansible.builtin.import_playbook: deploy-all-instances.yml

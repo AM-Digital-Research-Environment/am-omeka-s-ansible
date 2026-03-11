@@ -1,0 +1,43 @@
+---
+# =============================================================================
+# Global defaults — shared across all servers and instances
+# =============================================================================
+
+# Git repository for omeka-s-docker
+omeka_docker_repo: "https://github.com/AM-Digital-Research-Environment/omeka-s-docker.git"
+omeka_docker_branch: "main"
+
+# Default Omeka S version (can be overridden per instance)
+omeka_default_version: "4.2.0"
+
+# Base directory on target servers
+omeka_base_dir: "/opt/omeka-s"
+omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+omeka_backups_dir: "{{ omeka_base_dir }}/backups"
+
+# Deploy user (created by common role, used for Docker and management)
+deploy_user: deploy
+deploy_group: deploy
+
+# PHP-FPM defaults (overridable per instance)
+php_pm_max_children: 10
+php_pm_start_servers: 3
+php_pm_min_spare_servers: 2
+php_pm_max_spare_servers: 5
+php_pm_max_requests: 500
+
+# Backup defaults
+backup_retention_days: 30
+backup_remote_enabled: false
+# backup_remote_dest: "user@backup-server:/backups/omeka/"
+
+# Monitoring defaults
+monitoring_check_interval: "*/5 * * * *"
+monitoring_disk_threshold: 85
+# monitoring_alert_email: "admin@example.edu"
+
+# Firewall (ufw)
+firewall_allowed_tcp_ports:
+  - "22"
+  - "80"
+  - "443"

@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  role_name: common
+  author: AM Digital Research Environment
+  description: Base server hardening — packages, users, SSH, firewall, fail2ban
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies: []

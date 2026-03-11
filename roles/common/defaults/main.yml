@@ -1,0 +1,14 @@
+---
+# Deploy user configuration
+deploy_user: deploy
+deploy_group: deploy
+deploy_ssh_keys: []
+
+# SSH configuration
+ssh_port: 22
+ssh_permit_root: "no"
+ssh_password_auth: "no"
+
+# Firewall configuration
+firewall_allowed_tcp_ports:
+  - "22"

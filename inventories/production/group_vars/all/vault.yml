@@ -1,0 +1,7 @@
+---
+# =============================================================================
+# Encrypted shared secrets — encrypt with: ansible-vault encrypt vault.yml
+# =============================================================================
+
+# Example: shared credentials used across all instances
+# vault_deploy_user_password: "CHANGE_ME"

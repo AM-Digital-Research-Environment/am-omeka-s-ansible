@@ -1,0 +1,17 @@
+---
+# Health check cron schedule (default: every 5 minutes)
+monitoring_check_interval: "*/5 * * * *"
+
+# Disk usage percentage threshold for alerts
+monitoring_disk_threshold: 85
+
+# Email address for alerts (leave empty to disable email alerts)
+monitoring_alert_email: ""
+
+# Log file for health check results
+monitoring_log_file: "/var/log/omeka-health.log"
+
+# Instance directory — must match omeka_instance role's omeka_instances_dir
+omeka_base_dir: "/opt/omeka-s"
+omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+# Note: omeka_instances (dict) must be supplied by the inventory or playbook.

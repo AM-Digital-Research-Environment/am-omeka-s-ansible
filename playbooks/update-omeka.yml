@@ -1,0 +1,52 @@
+---
+# =============================================================================
+# Update Omeka S core version for an instance
+# Usage: ansible-playbook playbooks/update-omeka.yml -e "instance=archives-main target_version=4.3.0"
+# =============================================================================
+
+- name: Update Omeka S core
+  hosts: omeka_servers
+  become: true
+
+  pre_tasks:
+    - name: Validate parameters
+      ansible.builtin.assert:
+        that:
+          - instance is defined
+          - target_version is defined
+          - instance in omeka_instances
+        fail_msg: "Required: -e 'instance=<name> target_version=<version>'"
+
+    - name: Set instance variables
+      ansible.builtin.set_fact:
+        _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+
+  tasks:
+    - name: Run update-omeka.sh for {{ instance }}
+      ansible.builtin.shell: |
+        bash scripts/update-omeka.sh {{ target_version }}
+      args:
+        chdir: "{{ _instance_dir }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      register: update_result
+      changed_when: "'updated' in update_result.stdout or 'Updated' in update_result.stdout"
+
+    - name: Show update output
+      ansible.builtin.debug:
+        var: update_result.stdout_lines
+
+    - name: Rebuild and restart containers
+      ansible.builtin.shell: |
+        docker compose build --pull && docker compose up -d
+      args:
+        chdir: "{{ _instance_dir }}"
+
+    - name: Wait for instance to be healthy
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ omeka_instances[instance].nginx_port }}/"
+        status_code: [200, 302]
+      register: health
+      until: health.status in [200, 302]
+      retries: 36
+      delay: 5

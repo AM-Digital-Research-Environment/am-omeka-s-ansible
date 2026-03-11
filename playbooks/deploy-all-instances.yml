@@ -1,0 +1,43 @@
+---
+# =============================================================================
+# Deploy all instances defined in omeka_instances
+# Usage: ansible-playbook playbooks/deploy-all-instances.yml --limit server1
+# =============================================================================
+
+- name: Deploy all Omeka S instances
+  hosts: omeka_servers
+  become: true
+
+  pre_tasks:
+    - name: Ensure omeka_instances is defined
+      ansible.builtin.assert:
+        that:
+          - omeka_instances is defined
+          - omeka_instances | length > 0
+        fail_msg: "No omeka_instances defined for this host."
+
+  tasks:
+    - name: Deploy each instance
+      ansible.builtin.include_role:
+        name: omeka_instance
+      vars:
+        instance_name: "{{ item.key }}"
+        instance_config: "{{ item.value }}"
+        instance_secrets: "{{ omeka_instance_secrets[item.key] }}"
+      loop: "{{ omeka_instances | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Reload Caddy to pick up any new instances
+      ansible.builtin.service:
+        name: caddy
+        state: reloaded
+
+    - name: Set up backups
+      ansible.builtin.include_role:
+        name: backup
+      when: omeka_instances.values() | selectattr('backup_enabled', 'defined') | selectattr('backup_enabled') | list | length > 0
+
+    - name: Set up monitoring
+      ansible.builtin.include_role:
+        name: monitoring

@@ -1,0 +1,5 @@
+---
+# Staging overrides
+omeka_docker_branch: "develop"
+omeka_default_version: "4.2.0"
+backup_retention_days: 7

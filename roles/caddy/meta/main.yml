@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: caddy
+  author: AM Digital Research Environment
+  description: Install Caddy web server and template the Caddyfile for Omeka S reverse proxy
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies:
+  - role: common

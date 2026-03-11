@@ -1,0 +1,19 @@
+# Managed by Ansible
+{% for instance_name, instance_config in omeka_instances.items() %}
+
+{{ instance_config.domain }} {
+    reverse_proxy 127.0.0.1:{{ instance_config.nginx_port }} {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    request_body {
+        max_size 100MB
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/{{ instance_name }}-access.log
+    }
+}
+{% endfor %}

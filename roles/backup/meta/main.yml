@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: backup
+  author: AM Digital Research Environment
+  description: Automated database and files backups for Omeka S instances
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+
+# The backup role logically depends on omeka_instance having been run,
+# but this is a soft dependency — not enforced here to allow flexible
+# playbook composition.
+dependencies: []

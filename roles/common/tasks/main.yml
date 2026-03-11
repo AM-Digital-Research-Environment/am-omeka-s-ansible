@@ -1,0 +1,15 @@
+---
+- name: Install and configure essential packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Create deploy user and configure access
+  ansible.builtin.import_tasks: users.yml
+
+- name: Harden SSH configuration
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Configure firewall
+  ansible.builtin.import_tasks: firewall.yml
+
+- name: Configure fail2ban
+  ansible.builtin.import_tasks: fail2ban.yml

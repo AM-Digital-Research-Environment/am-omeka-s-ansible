@@ -1,0 +1,21 @@
+---
+# roles/omeka_instance/tasks/main.yml
+# Orchestrates deployment of a single Omeka S Docker instance.
+
+- name: "{{ instance_name }} | Clone / update omeka-s-docker repository"
+  ansible.builtin.include_tasks: clone.yml
+
+- name: "{{ instance_name }} | Configure environment"
+  ansible.builtin.include_tasks: configure.yml
+
+- name: "{{ instance_name }} | Deploy containers"
+  ansible.builtin.include_tasks: deploy.yml
+
+- name: "{{ instance_name }} | Install extra modules"
+  ansible.builtin.include_tasks: modules.yml
+
+- name: "{{ instance_name }} | Install extra themes"
+  ansible.builtin.include_tasks: themes.yml
+
+- name: "{{ instance_name }} | Healthcheck"
+  ansible.builtin.include_tasks: healthcheck.yml

@@ -1,0 +1,40 @@
+---
+# roles/omeka_instance/tasks/clone.yml
+# Create instance directory and clone/update the omeka-s-docker repository.
+
+- name: "{{ instance_name }} | Ensure instances base directory exists"
+  ansible.builtin.file:
+    path: "{{ omeka_instances_dir }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: "0755"
+  become: true
+
+- name: "{{ instance_name }} | Create instance directory"
+  ansible.builtin.file:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: "0755"
+  become: true
+
+- name: "{{ instance_name }} | Clone or update omeka-s-docker repository"
+  ansible.builtin.git:
+    repo: "{{ omeka_docker_repo }}"
+    dest: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    version: "{{ omeka_docker_branch }}"
+    force: false
+    update: true
+  become: true
+  become_user: "{{ deploy_user }}"
+
+- name: "{{ instance_name }} | Set ownership of instance directory"
+  ansible.builtin.file:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    recurse: true
+  become: true

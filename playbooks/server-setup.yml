@@ -1,0 +1,14 @@
+---
+# =============================================================================
+# Base server setup — common packages, Docker, Caddy
+# Usage: ansible-playbook playbooks/server-setup.yml --limit server1
+# =============================================================================
+
+- name: Base server setup
+  hosts: omeka_servers
+  become: true
+
+  roles:
+    - common
+    - docker
+    - caddy

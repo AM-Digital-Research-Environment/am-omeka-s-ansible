@@ -1,0 +1,28 @@
+---
+# =============================================================================
+# Server 1 — Instance definitions
+# =============================================================================
+
+omeka_instances:
+  archives-main:
+    domain: archives.example.edu
+    omeka_version: "4.2.0"
+    nginx_port: 8081
+    extra_modules:
+      - AdvancedSearch
+      - IiifServer
+    extra_themes:
+      - ColorMe
+    php_pm_max_children: 15
+    backup_enabled: true
+    backup_schedule: "0 2 * * *"
+
+  library-digital:
+    domain: digital.library.edu
+    omeka_version: "4.2.0"
+    nginx_port: 8082
+    extra_modules:
+      - CSVImport
+    extra_themes: []
+    backup_enabled: true
+    backup_schedule: "0 3 * * *"

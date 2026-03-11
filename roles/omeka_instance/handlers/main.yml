@@ -1,0 +1,10 @@
+---
+# roles/omeka_instance/handlers/main.yml
+# Handlers for the omeka_instance role.
+
+- name: restart omeka instance
+  ansible.builtin.shell:
+    cmd: docker compose restart
+    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  listen: restart omeka instance
+  changed_when: false

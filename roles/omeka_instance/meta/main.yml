@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: omeka_instance
+  author: AM Digital Research Environment
+  description: Deploy a single Omeka S Docker instance — clone, configure, build, and health-check
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies:
+  - role: docker

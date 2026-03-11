@@ -1,0 +1,16 @@
+---
+docker_edition: "ce"
+
+docker_packages:
+  - "docker-{{ docker_edition }}"
+  - "docker-{{ docker_edition }}-cli"
+  - "containerd.io"
+  - "docker-buildx-plugin"
+  - "docker-compose-plugin"
+
+docker_daemon_options:
+  log-driver: "json-file"
+  log-opts:
+    max-size: "10m"
+    max-file: "3"
+  storage-driver: "overlay2"

@@ -1,0 +1,14 @@
+---
+# roles/omeka_instance/tasks/modules.yml
+# Install extra Omeka S modules into the running instance.
+
+- name: "{{ instance_name }} | Install extra modules"
+  ansible.builtin.shell:
+    cmd: "bash scripts/install-module.sh {{ item }}"
+    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  loop: "{{ instance_config.extra_modules }}"
+  register: _module_install
+  changed_when: "'already installed' not in _module_install.stdout"
+  when:
+    - instance_config.extra_modules is defined
+    - instance_config.extra_modules | length > 0
