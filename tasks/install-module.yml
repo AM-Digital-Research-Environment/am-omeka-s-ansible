@@ -15,7 +15,6 @@
   ansible.builtin.set_fact:
     _vol_modules_path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/modules"
     _dl_dest: "/tmp/omeka_module_{{ mod_name }}.zip"
-    _extract_dest: "/tmp/omeka_module_{{ mod_name }}_extracted"
 
 - name: "{{ mod_name }} | Check if already installed"
   ansible.builtin.stat:
@@ -66,29 +65,17 @@
       become: true
       when: _mod_download is failed
 
-    - name: "{{ mod_name }} | Ensure clean extract directory"
-      ansible.builtin.file:
-        path: "{{ _extract_dest }}"
-        state: absent
-      become: true
-
-    - name: "{{ mod_name }} | Create extract directory"
-      ansible.builtin.file:
-        path: "{{ _extract_dest }}"
-        state: directory
-        mode: "0755"
-      become: true
-
-    - name: "{{ mod_name }} | Extract archive"
+    - name: "{{ mod_name }} | Extract archive directly to Docker volume"
       ansible.builtin.unarchive:
         src: "{{ _dl_dest }}"
-        dest: "{{ _extract_dest }}"
+        dest: "{{ _vol_modules_path }}"
         remote_src: true
       become: true
 
-    - name: "{{ mod_name }} | Find extracted directory"
+    - name: "{{ mod_name }} | Find extracted directory in volume"
       ansible.builtin.find:
-        paths: "{{ _extract_dest }}"
+        paths: "{{ _vol_modules_path }}"
+        patterns: "*{{ mod_name }}*,*{{ _mod_repo | regex_replace('.*/','') }}*"
         file_type: directory
         recurse: false
       register: _mod_extracted
@@ -96,10 +83,10 @@
 
     - name: "{{ mod_name }} | Identify extracted folder"
       ansible.builtin.set_fact:
-        _mod_src_dir: "{{ _mod_extracted.files[0].path }}"
+        _mod_src_dir: "{{ (_mod_extracted.files | sort(attribute='path') | last).path }}"
       when: _mod_extracted.files | length > 0
 
-    - name: "{{ mod_name }} | Copy module to Docker volume"
+    - name: "{{ mod_name }} | Rename extracted folder to module name"
       ansible.builtin.copy:
         src: "{{ _mod_src_dir }}/"
         dest: "{{ _vol_modules_path }}/{{ mod_name }}/"
@@ -108,14 +95,31 @@
         group: "33"
         mode: "0775"
       become: true
+      when: _mod_src_dir != (_vol_modules_path + '/' + mod_name)
+
+    - name: "{{ mod_name }} | Remove extracted archive folder"
+      ansible.builtin.file:
+        path: "{{ _mod_src_dir }}"
+        state: absent
+      become: true
+      when:
+        - _mod_src_dir is defined
+        - _mod_src_dir != (_vol_modules_path + '/' + mod_name)
+
+    - name: "{{ mod_name }} | Set ownership on module"
+      ansible.builtin.file:
+        path: "{{ _vol_modules_path }}/{{ mod_name }}"
+        state: directory
+        recurse: true
+        owner: "33"
+        group: "33"
+        mode: "0775"
+      become: true
 
     - name: "{{ mod_name }} | Clean up download"
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ _dl_dest }}"
         state: absent
-      loop:
-        - "{{ _dl_dest }}"
-        - "{{ _extract_dest }}"
       become: true
 
     - name: "{{ mod_name }} | Module installed"
