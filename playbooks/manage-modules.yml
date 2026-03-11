@@ -1,9 +1,11 @@
 ---
 # =============================================================================
-# Install or update modules for an instance
+# Install or update modules for an instance (Semaphore-compatible)
+# Uses only declarative modules — no shell/command/raw.
+#
 # Usage:
-#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main module_action=install modules=CSVImport,UniversalViewer"
-#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main module_action=update modules=CSVImport"
+#   ansible-playbook playbooks/manage-modules.yml \
+#     -e "instance=archives-main module_action=install modules=CSVImport,AdvancedSearch"
 # =============================================================================
 
 - name: Manage Omeka S modules
@@ -13,6 +15,43 @@
   vars:
     omeka_base_dir: /opt/omeka-s
     omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+    _php_container: "{{ instance }}-php-1"
+    _modules_path: /var/www/html/modules
+
+    # Module source mapping — matches install-module.sh in omeka-s-docker
+    # Format: { repo: "org/repo", branch: "branch" }
+    module_sources:
+      # Daniel-KM modules
+      AdvancedSearch:  { repo: "Daniel-KM/Omeka-S-module-AdvancedSearch", branch: "master", deps: ["Common"] }
+      AnalyticsSnippet: { repo: "Daniel-KM/Omeka-S-module-AnalyticsSnippet", branch: "master" }
+      BulkEdit:        { repo: "Daniel-KM/Omeka-S-module-BulkEdit", branch: "master", deps: ["Common"] }
+      BulkExport:      { repo: "Daniel-KM/Omeka-S-module-BulkExport", branch: "master", deps: ["Common"] }
+      Common:          { repo: "Daniel-KM/Omeka-S-module-Common", branch: "master" }
+      Cron:            { repo: "Daniel-KM/Omeka-S-module-Cron", branch: "master" }
+      EasyAdmin:       { repo: "Daniel-KM/Omeka-S-module-EasyAdmin", branch: "master", deps: ["Common", "Cron"] }
+      IiifServer:      { repo: "Daniel-KM/Omeka-S-module-IiifServer", branch: "master", deps: ["Common"] }
+      ImageServer:     { repo: "Daniel-KM/Omeka-S-module-ImageServer", branch: "master", deps: ["Common"] }
+      Log:             { repo: "Daniel-KM/Omeka-S-module-Log", branch: "master", deps: ["Common"] }
+      OaiPmhRepository: { repo: "Daniel-KM/Omeka-S-module-OaiPmhRepository", branch: "master", deps: ["Common"] }
+      Reference:       { repo: "Daniel-KM/Omeka-S-module-Reference", branch: "master", deps: ["Common"] }
+      SearchSolr:      { repo: "Daniel-KM/Omeka-S-module-SearchSolr", branch: "master", deps: ["Common", "AdvancedSearch"] }
+      UniversalViewer: { repo: "Daniel-KM/Omeka-S-module-UniversalViewer", branch: "master", deps: ["Common"] }
+      # Official Omeka-S modules
+      CSSEditor:       { repo: "omeka-s-modules/CSSEditor", branch: "master" }
+      CSVImport:       { repo: "omeka-s-modules/CSVImport", branch: "develop" }
+      CustomVocab:     { repo: "omeka-s-modules/CustomVocab", branch: "master" }
+      DspaceConnector: { repo: "omeka-s-modules/DspaceConnector", branch: "develop" }
+      Exports:         { repo: "omeka-s-modules/Exports", branch: "main" }
+      Hierarchy:       { repo: "omeka-s-modules/Hierarchy", branch: "main" }
+      InverseProperties: { repo: "omeka-s-modules/InverseProperties", branch: "main" }
+      ItemCarouselBlock: { repo: "omeka-s-modules/ItemCarouselBlock", branch: "master" }
+      OutputFormats:   { repo: "omeka-s-modules/OutputFormats", branch: "main" }
+      ResourceMeta:    { repo: "omeka-s-modules/ResourceMeta", branch: "master" }
+      ValueSuggest:    { repo: "omeka-s-modules/ValueSuggest", branch: "master" }
+      # Other modules
+      IframeEmbed:     { repo: "fmadore/IframeEmbed", branch: "main" }
+      RightsStatements: { repo: "zerocrates/RightsStatements", branch: "master" }
+      Sitemaps:        { repo: "ManOnDaMoon/omeka-s-module-Sitemaps", branch: "master" }
 
   pre_tasks:
     - name: Validate parameters
@@ -25,20 +64,31 @@
           - modules is defined
         fail_msg: "Required: -e 'instance=<name> module_action=install|update modules=Mod1,Mod2'"
 
-    - name: Set instance directory
+    - name: Build full module list (with dependencies)
       ansible.builtin.set_fact:
-        _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+        _all_modules: >-
+          {%- set result = [] -%}
+          {%- for mod in modules.split(',') -%}
+            {%- if mod in module_sources and module_sources[mod].deps is defined -%}
+              {%- for dep in module_sources[mod].deps -%}
+                {%- if dep not in result -%}
+                  {%- if result.append(dep) -%}{%- endif -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+            {%- if mod not in result -%}
+              {%- if result.append(mod) -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ result }}
+
+    - name: Show modules to process
+      ansible.builtin.debug:
+        msg: "Modules to {{ module_action }}: {{ _all_modules | join(', ') }}"
 
   tasks:
-    - name: "{{ module_action | capitalize }} modules"
-      ansible.builtin.shell: |
-        bash scripts/{{ (module_action == 'install') | ternary('install-module.sh', 'update-module.sh') }} {{ item }}
-      args:
-        chdir: "{{ _instance_dir }}"
-      loop: "{{ modules.split(',') }}"
+    - name: "Process module {{ mod_name }}"
+      ansible.builtin.include_tasks: ../tasks/install-module.yml
+      loop: "{{ _all_modules }}"
       loop_control:
-        label: "{{ item }}"
-      become: true
-      register: module_result
-      changed_when: "'installed' in module_result.stdout or 'updated' in module_result.stdout"
-      failed_when: module_result.rc != 0
+        loop_var: mod_name

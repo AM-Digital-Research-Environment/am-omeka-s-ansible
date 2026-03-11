@@ -1,0 +1,123 @@
+---
+# tasks/install-module.yml
+# Install a single Omeka S module into the PHP container.
+# Called from manage-modules.yml with loop_var: mod_name
+#
+# Uses only declarative modules (no shell/command) for Semaphore compatibility.
+
+- name: "{{ mod_name }} | Validate module is known"
+  ansible.builtin.assert:
+    that:
+      - mod_name in module_sources
+    fail_msg: "Unknown module '{{ mod_name }}'. Add it to module_sources in manage-modules.yml."
+
+- name: "{{ mod_name }} | Check if already installed"
+  community.docker.docker_container_exec:
+    container: "{{ _php_container }}"
+    command: "test -d {{ _modules_path }}/{{ mod_name }}"
+  register: _mod_check
+  ignore_errors: true
+
+- name: "{{ mod_name }} | Skip if already installed (install mode)"
+  ansible.builtin.debug:
+    msg: "Module {{ mod_name }} is already installed."
+  when:
+    - module_action == 'install'
+    - _mod_check.rc == 0
+
+- name: "{{ mod_name }} | Remove old version (update mode)"
+  community.docker.docker_container_exec:
+    container: "{{ _php_container }}"
+    command: "rm -rf {{ _modules_path }}/{{ mod_name }}"
+  when:
+    - module_action == 'update'
+    - _mod_check.rc == 0
+
+- name: "{{ mod_name }} | Install module"
+  when: _mod_check.rc != 0 or module_action == 'update'
+  block:
+    - name: "{{ mod_name }} | Set module source info"
+      ansible.builtin.set_fact:
+        _mod_repo: "{{ module_sources[mod_name].repo }}"
+        _mod_branch: "{{ module_sources[mod_name].branch }}"
+
+    - name: "{{ mod_name }} | Create temp directory on host"
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: "omeka_module_"
+      register: _mod_tmpdir
+
+    - name: "{{ mod_name }} | Download module archive"
+      ansible.builtin.get_url:
+        url: "https://github.com/{{ _mod_repo }}/archive/refs/heads/{{ _mod_branch }}.zip"
+        dest: "{{ _mod_tmpdir.path }}/module.zip"
+        mode: "0644"
+      register: _mod_download
+      ignore_errors: true
+
+    - name: "{{ mod_name }} | Try tag download if branch failed"
+      ansible.builtin.get_url:
+        url: "https://github.com/{{ _mod_repo }}/archive/refs/tags/{{ _mod_branch }}.zip"
+        dest: "{{ _mod_tmpdir.path }}/module.zip"
+        mode: "0644"
+      when: _mod_download is failed
+
+    - name: "{{ mod_name }} | Extract archive on host"
+      ansible.builtin.unarchive:
+        src: "{{ _mod_tmpdir.path }}/module.zip"
+        dest: "{{ _mod_tmpdir.path }}"
+        remote_src: true
+
+    - name: "{{ mod_name }} | Find extracted directory"
+      ansible.builtin.find:
+        paths: "{{ _mod_tmpdir.path }}"
+        file_type: directory
+        recurse: false
+        excludes:
+          - "module.zip"
+      register: _mod_extracted
+
+    - name: "{{ mod_name }} | Rename extracted directory"
+      ansible.builtin.copy:
+        src: "{{ _mod_extracted.files[0].path }}/"
+        dest: "{{ _mod_tmpdir.path }}/{{ mod_name }}/"
+        remote_src: true
+        mode: preserve
+      when: _mod_extracted.files | length > 0
+
+    - name: "{{ mod_name }} | Copy module into PHP container"
+      community.docker.docker_container_copy_into:
+        container: "{{ _php_container }}"
+        path: "{{ _mod_tmpdir.path }}/{{ mod_name }}"
+        container_path: "{{ _modules_path }}/{{ mod_name }}"
+        owner_id: 33
+        group_id: 33
+      when: _mod_extracted.files | length > 0
+
+    - name: "{{ mod_name }} | Set permissions in container"
+      community.docker.docker_container_exec:
+        container: "{{ _php_container }}"
+        command: "chmod -R 775 {{ _modules_path }}/{{ mod_name }}"
+
+    - name: "{{ mod_name }} | Check for composer.json"
+      community.docker.docker_container_exec:
+        container: "{{ _php_container }}"
+        command: "test -f {{ _modules_path }}/{{ mod_name }}/composer.json"
+      register: _mod_composer
+      ignore_errors: true
+
+    - name: "{{ mod_name }} | Install composer dependencies"
+      community.docker.docker_container_exec:
+        container: "{{ _php_container }}"
+        command: "bash -c 'source /usr/local/bin/ensure-composer.sh && ensure_composer && cd {{ _modules_path }}/{{ mod_name }} && composer install --no-dev --quiet'"
+      when: _mod_composer.rc == 0
+      ignore_errors: true
+
+    - name: "{{ mod_name }} | Clean up temp directory"
+      ansible.builtin.file:
+        path: "{{ _mod_tmpdir.path }}"
+        state: absent
+
+    - name: "{{ mod_name }} | Module installed successfully"
+      ansible.builtin.debug:
+        msg: "Module {{ mod_name }} installed. Activate it in Omeka S admin panel."
