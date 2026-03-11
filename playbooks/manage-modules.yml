@@ -1,57 +1,25 @@
 ---
 # =============================================================================
-# Install or update modules for an instance (Semaphore-compatible)
-# Uses only declarative modules — no shell/command/raw.
+# Install extra modules for an instance
+#
+# Modules are installed by the container entrypoint via EXTRA_MODULES env var.
+# This playbook updates the .env file and recreates the PHP container.
 #
 # Usage:
 #   ansible-playbook playbooks/manage-modules.yml \
-#     -e "instance=archives-main module_action=install modules=CSVImport,AdvancedSearch"
+#     -e "instance=test-instance modules=CSSEditor,AdvancedSearch"
+#
+# Supports module short names (CSSEditor) or full format (CSSEditor:omeka-s-modules/CSSEditor:master)
+# Dependencies are resolved automatically by the entrypoint.
 # =============================================================================
 
-- name: Manage Omeka S modules
+- name: Install Omeka S modules
   hosts: omeka_servers
   become: true
 
   vars:
     omeka_base_dir: /opt/omeka-s
     omeka_instances_dir: "{{ omeka_base_dir }}/instances"
-    _php_container: "{{ instance }}-php-1"
-    _modules_path: /var/www/html/modules
-
-    # Module source mapping — matches install-module.sh in omeka-s-docker
-    # Format: { repo: "org/repo", branch: "branch" }
-    module_sources:
-      # Daniel-KM modules
-      AdvancedSearch:  { repo: "Daniel-KM/Omeka-S-module-AdvancedSearch", branch: "master", deps: ["Common"] }
-      AnalyticsSnippet: { repo: "Daniel-KM/Omeka-S-module-AnalyticsSnippet", branch: "master" }
-      BulkEdit:        { repo: "Daniel-KM/Omeka-S-module-BulkEdit", branch: "master", deps: ["Common"] }
-      BulkExport:      { repo: "Daniel-KM/Omeka-S-module-BulkExport", branch: "master", deps: ["Common"] }
-      Common:          { repo: "Daniel-KM/Omeka-S-module-Common", branch: "master" }
-      Cron:            { repo: "Daniel-KM/Omeka-S-module-Cron", branch: "master" }
-      EasyAdmin:       { repo: "Daniel-KM/Omeka-S-module-EasyAdmin", branch: "master", deps: ["Common", "Cron"] }
-      IiifServer:      { repo: "Daniel-KM/Omeka-S-module-IiifServer", branch: "master", deps: ["Common"] }
-      ImageServer:     { repo: "Daniel-KM/Omeka-S-module-ImageServer", branch: "master", deps: ["Common"] }
-      Log:             { repo: "Daniel-KM/Omeka-S-module-Log", branch: "master", deps: ["Common"] }
-      OaiPmhRepository: { repo: "Daniel-KM/Omeka-S-module-OaiPmhRepository", branch: "master", deps: ["Common"] }
-      Reference:       { repo: "Daniel-KM/Omeka-S-module-Reference", branch: "master", deps: ["Common"] }
-      SearchSolr:      { repo: "Daniel-KM/Omeka-S-module-SearchSolr", branch: "master", deps: ["Common", "AdvancedSearch"] }
-      UniversalViewer: { repo: "Daniel-KM/Omeka-S-module-UniversalViewer", branch: "master", deps: ["Common"] }
-      # Official Omeka-S modules
-      CSSEditor:       { repo: "omeka-s-modules/CSSEditor", branch: "master" }
-      CSVImport:       { repo: "omeka-s-modules/CSVImport", branch: "develop" }
-      CustomVocab:     { repo: "omeka-s-modules/CustomVocab", branch: "master" }
-      DspaceConnector: { repo: "omeka-s-modules/DspaceConnector", branch: "develop" }
-      Exports:         { repo: "omeka-s-modules/Exports", branch: "main" }
-      Hierarchy:       { repo: "omeka-s-modules/Hierarchy", branch: "main" }
-      InverseProperties: { repo: "omeka-s-modules/InverseProperties", branch: "main" }
-      ItemCarouselBlock: { repo: "omeka-s-modules/ItemCarouselBlock", branch: "master" }
-      OutputFormats:   { repo: "omeka-s-modules/OutputFormats", branch: "main" }
-      ResourceMeta:    { repo: "omeka-s-modules/ResourceMeta", branch: "master" }
-      ValueSuggest:    { repo: "omeka-s-modules/ValueSuggest", branch: "master" }
-      # Other modules
-      IframeEmbed:     { repo: "fmadore/IframeEmbed", branch: "main" }
-      RightsStatements: { repo: "zerocrates/RightsStatements", branch: "master" }
-      Sitemaps:        { repo: "ManOnDaMoon/omeka-s-module-Sitemaps", branch: "master" }
 
   pre_tasks:
     - name: Validate parameters
@@ -59,36 +27,66 @@
         that:
           - instance is defined
           - instance in omeka_instances
-          - module_action is defined
-          - module_action in ['install', 'update']
           - modules is defined
-        fail_msg: "Required: -e 'instance=<name> module_action=install|update modules=Mod1,Mod2'"
+        fail_msg: "Required: -e 'instance=<name> modules=CSSEditor,AdvancedSearch'"
 
-    - name: Build full module list (with dependencies)
+    - name: Set instance variables
       ansible.builtin.set_fact:
-        _all_modules: >-
-          {%- set result = [] -%}
-          {%- for mod in modules.split(',') -%}
-            {%- if mod in module_sources and module_sources[mod].deps is defined -%}
-              {%- for dep in module_sources[mod].deps -%}
-                {%- if dep not in result -%}
-                  {%- if result.append(dep) -%}{%- endif -%}
-                {%- endif -%}
-              {%- endfor -%}
-            {%- endif -%}
-            {%- if mod not in result -%}
-              {%- if result.append(mod) -%}{%- endif -%}
-            {%- endif -%}
-          {%- endfor -%}
-          {{ result }}
+        _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+        _instance_config: "{{ omeka_instances[instance] }}"
+        _new_modules: "{{ modules.split(',') | map('trim') | list }}"
 
-    - name: Show modules to process
+    - name: Build merged module list
+      ansible.builtin.set_fact:
+        _all_extra_modules: "{{ ((_instance_config.extra_modules | default([])) + _new_modules) | unique }}"
+
+    - name: Show modules to install
       ansible.builtin.debug:
-        msg: "Modules to {{ module_action }}: {{ _all_modules | join(', ') }}"
+        msg: "Extra modules for {{ instance }}: {{ _all_extra_modules | join(', ') }}"
 
   tasks:
-    - name: "Process module {{ mod_name }}"
-      ansible.builtin.include_tasks: ../tasks/install-module.yml
-      loop: "{{ _all_modules }}"
-      loop_control:
-        loop_var: mod_name
+    - name: Read current .env file
+      ansible.builtin.slurp:
+        src: "{{ _instance_dir }}/.env"
+      register: _current_env
+
+    - name: Update EXTRA_MODULES in .env
+      ansible.builtin.lineinfile:
+        path: "{{ _instance_dir }}/.env"
+        regexp: "^EXTRA_MODULES="
+        line: "EXTRA_MODULES={{ _all_extra_modules | join(',') }}"
+        state: present
+      register: _env_updated
+
+    - name: Insert EXTRA_MODULES if not present
+      ansible.builtin.lineinfile:
+        path: "{{ _instance_dir }}/.env"
+        line: "EXTRA_MODULES={{ _all_extra_modules | join(',') }}"
+        state: present
+      when: "'EXTRA_MODULES' not in (_current_env.content | b64decode)"
+
+    - name: Recreate PHP container to trigger module installation
+      community.docker.docker_compose_v2:
+        project_src: "{{ _instance_dir }}"
+        state: present
+        pull: never
+        recreate: always
+        wait: true
+        wait_timeout: 300
+      become: true
+      when: _env_updated is changed
+
+    - name: Wait for instance to be healthy
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ _instance_config.nginx_port }}/"
+        method: GET
+        status_code: [200, 301, 302, 401, 403]
+        timeout: 10
+      register: _health
+      until: _health is succeeded
+      retries: 30
+      delay: 10
+
+    - name: Modules installed
+      ansible.builtin.debug:
+        msg: "Modules {{ _all_extra_modules | join(', ') }} installed. Activate them in Omeka S admin panel."
