@@ -6,11 +6,12 @@
   ansible.builtin.shell:
     cmd: "bash scripts/install-theme.sh {{ theme_name }}"
     chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  become: true
   loop: "{{ instance_config.extra_themes }}"
   loop_control:
     loop_var: theme_name
   register: _theme_install
-  changed_when: "'already installed' not in _theme_install.stdout"
+  changed_when: "'already installed' not in (_theme_install.stdout | default(''))"
   when:
     - instance_config.extra_themes is defined
     - instance_config.extra_themes | length > 0

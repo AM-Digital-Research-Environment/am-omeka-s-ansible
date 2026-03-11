@@ -2,16 +2,29 @@
 # roles/omeka_instance/tasks/deploy.yml
 # Build and start the Docker Compose stack for the instance.
 
+- name: "{{ instance_name }} | Verify instance directory exists"
+  ansible.builtin.stat:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}/docker-compose.yml"
+  register: _compose_file
+  become: true
+
+- name: "{{ instance_name }} | Fail if docker-compose.yml not found"
+  ansible.builtin.fail:
+    msg: "docker-compose.yml not found at {{ omeka_instances_dir }}/{{ instance_name }}/"
+  when: not _compose_file.stat.exists
+
 - name: "{{ instance_name }} | Build Docker images"
-  ansible.builtin.shell:
+  ansible.builtin.command:
     cmd: docker compose build --pull
     chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  become: true
   register: _docker_build
-  changed_when: "'writing image' in _docker_build.stdout or 'exporting layers' in _docker_build.stdout"
+  changed_when: "'writing image' in (_docker_build.stdout | default('')) or 'exporting layers' in (_docker_build.stdout | default(''))"
 
 - name: "{{ instance_name }} | Start containers"
-  ansible.builtin.shell:
+  ansible.builtin.command:
     cmd: docker compose up -d
     chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  become: true
   register: _docker_up
-  changed_when: "'Started' in _docker_up.stderr or 'Creating' in _docker_up.stderr or 'Recreat' in _docker_up.stderr"
+  changed_when: "'Started' in (_docker_up.stderr | default('')) or 'Creating' in (_docker_up.stderr | default('')) or 'Recreat' in (_docker_up.stderr | default(''))"
