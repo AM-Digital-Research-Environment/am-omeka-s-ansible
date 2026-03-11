@@ -2,16 +2,6 @@
 # roles/omeka_instance/tasks/clone.yml
 # Create instance directory and clone/update the omeka-s-docker repository.
 
-- name: "{{ instance_name }} | Debug — check target host"
-  ansible.builtin.raw: "hostname && echo '---' && ls -la {{ omeka_instances_dir }}/ 2>/dev/null || echo 'dir not found'"
-  become: true
-  register: _debug_info
-  changed_when: false
-
-- name: "{{ instance_name }} | Debug output"
-  ansible.builtin.debug:
-    var: _debug_info.stdout_lines
-
 - name: "{{ instance_name }} | Check if instance path exists"
   ansible.builtin.stat:
     path: "{{ omeka_instances_dir }}/{{ instance_name }}"
@@ -41,12 +31,19 @@
     update: true
   become: true
 
-- name: "{{ instance_name }} | Verify clone contents"
-  ansible.builtin.raw: "ls -la {{ omeka_instances_dir }}/{{ instance_name }}/"
+- name: "{{ instance_name }} | Verify docker-compose.yml exists after clone"
+  ansible.builtin.stat:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}/docker-compose.yml"
   become: true
-  register: _clone_contents
-  changed_when: false
+  register: _compose_file
 
-- name: "{{ instance_name }} | Show clone contents"
+- name: "{{ instance_name }} | Show clone result"
   ansible.builtin.debug:
-    var: _clone_contents.stdout_lines
+    msg: "Clone path: {{ omeka_instances_dir }}/{{ instance_name }} | docker-compose.yml exists: {{ _compose_file.stat.exists }}"
+
+- name: "{{ instance_name }} | Fail if docker-compose.yml not found after clone"
+  ansible.builtin.fail:
+    msg: >-
+      docker-compose.yml not found at {{ omeka_instances_dir }}/{{ instance_name }}/.
+      The git clone may have failed silently. Check repo URL: {{ omeka_docker_repo }}
+  when: not _compose_file.stat.exists

@@ -2,24 +2,16 @@
 # roles/omeka_instance/tasks/deploy.yml
 # Build and start the Docker Compose stack for the instance.
 
-- name: "{{ instance_name }} | Check instance directory type"
-  ansible.builtin.raw: "file {{ omeka_instances_dir }}/{{ instance_name }} && ls {{ omeka_instances_dir }}/{{ instance_name }}/docker-compose.yml 2>&1"
+- name: "{{ instance_name }} | Pull and build Docker images"
+  community.docker.docker_compose_v2:
+    project_src: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    state: present
+    build: always
+    pull: always
   become: true
-  register: _dir_check
-  changed_when: false
+  register: _docker_compose
 
-- name: "{{ instance_name }} | Show directory check"
+- name: "{{ instance_name }} | Show Docker Compose result"
   ansible.builtin.debug:
-    var: _dir_check.stdout_lines
-
-- name: "{{ instance_name }} | Build Docker images"
-  ansible.builtin.raw: "cd {{ omeka_instances_dir }}/{{ instance_name }} && docker compose build --pull 2>&1"
-  become: true
-  register: _docker_build
-  changed_when: "'writing image' in _docker_build.stdout or 'exporting layers' in _docker_build.stdout"
-
-- name: "{{ instance_name }} | Start containers"
-  ansible.builtin.raw: "cd {{ omeka_instances_dir }}/{{ instance_name }} && docker compose up -d 2>&1"
-  become: true
-  register: _docker_up
-  changed_when: "'Started' in _docker_up.stdout or 'Creating' in _docker_up.stdout or 'Recreat' in _docker_up.stdout"
+    msg: "Containers: {{ _docker_compose.containers | default([]) | map(attribute='Name') | list }}"
+  when: _docker_compose.containers is defined

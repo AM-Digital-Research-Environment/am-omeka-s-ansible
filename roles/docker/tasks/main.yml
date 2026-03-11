@@ -1,9 +1,8 @@
 ---
-- name: Check if Docker is already installed
-  ansible.builtin.raw: docker --version
-  register: _docker_installed
-  changed_when: false
-  failed_when: false
+- name: Check if Docker binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: _docker_binary
   become: true
 
 - name: Install Docker prerequisites
@@ -17,7 +16,7 @@
     state: present
     update_cache: true
   become: true
-  when: _docker_installed.rc != 0
+  when: not _docker_binary.stat.exists
 
 - name: Ensure /etc/apt/keyrings directory exists
   ansible.builtin.file:
@@ -25,7 +24,7 @@
     state: directory
     mode: "0755"
   become: true
-  when: _docker_installed.rc != 0
+  when: not _docker_binary.stat.exists
 
 - name: Determine OS distribution for Docker repo
   ansible.builtin.set_fact:
@@ -38,7 +37,7 @@
     keyring: /etc/apt/keyrings/docker.gpg
     state: present
   become: true
-  when: _docker_installed.rc != 0
+  when: not _docker_binary.stat.exists
 
 - name: Add Docker apt repository
   ansible.builtin.apt_repository:
@@ -50,7 +49,7 @@
     state: present
     filename: docker
   become: true
-  when: _docker_installed.rc != 0
+  when: not _docker_binary.stat.exists
 
 - name: Install Docker packages
   ansible.builtin.apt:
@@ -58,7 +57,7 @@
     state: present
     update_cache: true
   become: true
-  when: _docker_installed.rc != 0
+  when: not _docker_binary.stat.exists
 
 - name: Create Docker configuration directory
   ansible.builtin.file:
