@@ -1,17 +1,12 @@
 ---
 # roles/omeka_instance/tasks/themes.yml
-# Install extra Omeka S themes into the running instance.
+# Themes are installed by the container entrypoint via EXTRA_THEMES env var.
+# The env.j2 template includes EXTRA_THEMES from instance_config.extra_themes.
+# No action needed here — just log what's configured.
 
-- name: "{{ instance_name }} | Install extra themes"
-  ansible.builtin.shell:
-    cmd: "bash scripts/install-theme.sh {{ theme_name }}"
-    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
-  become: true
-  loop: "{{ instance_config.extra_themes }}"
-  loop_control:
-    loop_var: theme_name
-  register: _theme_install
-  changed_when: "'already installed' not in (_theme_install.stdout | default(''))"
-  when:
-    - instance_config.extra_themes is defined
-    - instance_config.extra_themes | length > 0
+- name: "{{ instance_name }} | Extra themes configured"
+  ansible.builtin.debug:
+    msg: >-
+      Extra themes: {{ instance_config.extra_themes | default([]) | join(', ') | default('none', true) }}.
+      Installed by container entrypoint via EXTRA_THEMES env var.
+  when: instance_config.extra_themes is defined and instance_config.extra_themes | length > 0

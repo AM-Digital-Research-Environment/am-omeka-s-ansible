@@ -1,8 +1,17 @@
 ---
 # =============================================================================
-# Install or update themes for an instance
-# Usage:
-#   ansible-playbook playbooks/manage-themes.yml -e "instance=archives-main theme_action=install themes=ColorMe,CenterRow"
+# Install or update extra themes for an instance
+#
+# Themes are installed by the container entrypoint via EXTRA_THEMES env var.
+# This playbook updates the .env file and recreates containers.
+#
+# Install:
+#   ansible-playbook playbooks/manage-themes.yml \
+#     -e "instance=test-instance themes=ColorMe,CenterRow"
+#
+# Update:
+#   ansible-playbook playbooks/manage-themes.yml \
+#     -e "instance=test-instance themes=ColorMe theme_action=update"
 # =============================================================================
 
 - name: Manage Omeka S themes
@@ -12,6 +21,7 @@
   vars:
     omeka_base_dir: /opt/omeka-s
     omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+    theme_action: install
 
   pre_tasks:
     - name: Validate parameters
@@ -19,25 +29,86 @@
         that:
           - instance is defined
           - instance in omeka_instances
-          - theme_action is defined
-          - theme_action in ['install', 'update']
           - themes is defined
-        fail_msg: "Required: -e 'instance=<name> theme_action=install|update themes=Theme1,Theme2'"
+          - theme_action in ['install', 'update']
+        fail_msg: "Required: -e 'instance=<name> themes=Theme1,Theme2' (optional: theme_action=update)"
 
-    - name: Set instance directory
+    - name: Set instance variables
       ansible.builtin.set_fact:
         _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
+        _instance_config: "{{ omeka_instances[instance] }}"
+        _new_themes: "{{ themes.split(',') | map('trim') | list }}"
+
+    - name: Build merged theme list
+      ansible.builtin.set_fact:
+        _all_extra_themes: "{{ ((_instance_config.extra_themes | default([])) + _new_themes) | unique }}"
+
+    - name: Show plan
+      ansible.builtin.debug:
+        msg: "Action: {{ theme_action }} | Themes: {{ _all_extra_themes | join(', ') }}"
 
   tasks:
-    - name: "{{ theme_action | capitalize }} themes"
-      ansible.builtin.shell: |
-        bash scripts/install-theme.sh {{ item }}
-      args:
-        chdir: "{{ _instance_dir }}"
-      loop: "{{ themes.split(',') }}"
+    # --- Step 1: Update .env to include EXTRA_THEMES ---
+    - name: Read current .env file
+      ansible.builtin.slurp:
+        src: "{{ _instance_dir }}/.env"
+      register: _current_env
+
+    - name: Filter out old EXTRA_THEMES line and build new content
+      ansible.builtin.set_fact:
+        _clean_lines: >-
+          {{ (_current_env.content | b64decode).split('\n')
+             | reject('match', '^EXTRA_THEMES=')
+             | reject('match', '^\s*$')
+             | list }}
+        _extra_themes_line: "EXTRA_THEMES={{ _all_extra_themes | join(',') }}"
+
+    - name: Write updated .env file
+      ansible.builtin.copy:
+        content: "{{ (_clean_lines + [_extra_themes_line]) | join('\n') }}\n"
+        dest: "{{ _instance_dir }}/.env"
+        mode: "0600"
+
+    # --- Step 2: For updates, remove theme dirs so entrypoint re-downloads ---
+    - name: "Remove theme directories for update"
+      ansible.builtin.file:
+        path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/themes/{{ item }}"
+        state: absent
+      loop: "{{ _new_themes }}"
+      when: theme_action == 'update'
+
+    # --- Step 3: Recreate containers to trigger entrypoint ---
+    - name: Recreate containers to trigger theme installation
+      community.docker.docker_compose_v2:
+        project_src: "{{ _instance_dir }}"
+        state: present
+        pull: never
+        recreate: always
+        wait: true
+        wait_timeout: 300
+
+    # --- Step 4: Health check ---
+    - name: Wait for instance to be healthy
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ _instance_config.nginx_port }}/"
+        method: GET
+        status_code: [200, 301, 302, 401, 403]
+        timeout: 10
+      register: _health
+      until: _health is succeeded
+      retries: 30
+      delay: 10
+
+    # --- Step 5: Verify themes exist ---
+    - name: Check installed themes
+      ansible.builtin.stat:
+        path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/themes/{{ item }}"
+      loop: "{{ _new_themes }}"
+      register: _theme_check
+
+    - name: Report results
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ 'INSTALLED' if item.stat.exists else 'FAILED' }}"
+      loop: "{{ _theme_check.results }}"
       loop_control:
-        label: "{{ item }}"
-      become: true
-      register: theme_result
-      changed_when: "'installed' in theme_result.stdout or 'updated' in theme_result.stdout"
-      failed_when: theme_result.rc != 0
+        label: "{{ item.item }}"

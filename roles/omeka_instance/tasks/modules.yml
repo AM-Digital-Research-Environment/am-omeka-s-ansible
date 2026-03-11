@@ -1,17 +1,12 @@
 ---
 # roles/omeka_instance/tasks/modules.yml
-# Install extra Omeka S modules into the running instance.
+# Modules are installed by the container entrypoint via EXTRA_MODULES env var.
+# The env.j2 template includes EXTRA_MODULES from instance_config.extra_modules.
+# No action needed here — just log what's configured.
 
-- name: "{{ instance_name }} | Install extra modules"
-  ansible.builtin.shell:
-    cmd: "bash scripts/install-module.sh {{ module_name }}"
-    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
-  become: true
-  loop: "{{ instance_config.extra_modules }}"
-  loop_control:
-    loop_var: module_name
-  register: _module_install
-  changed_when: "'already installed' not in (_module_install.stdout | default(''))"
-  when:
-    - instance_config.extra_modules is defined
-    - instance_config.extra_modules | length > 0
+- name: "{{ instance_name }} | Extra modules configured"
+  ansible.builtin.debug:
+    msg: >-
+      Extra modules: {{ instance_config.extra_modules | default([]) | join(', ') | default('none', true) }}.
+      Installed by container entrypoint via EXTRA_MODULES env var.
+  when: instance_config.extra_modules is defined and instance_config.extra_modules | length > 0

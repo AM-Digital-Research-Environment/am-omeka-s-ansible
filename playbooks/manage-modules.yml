@@ -1,23 +1,27 @@
 ---
 # =============================================================================
-# Install extra modules for an instance
+# Install or update extra modules for an instance
 #
 # Modules are installed by the container entrypoint via EXTRA_MODULES env var.
-# This playbook rewrites the .env file (using copy, not lineinfile) and
-# recreates the PHP container.
+# This playbook updates the .env file and recreates containers.
 #
-# Usage:
+# Install (skip existing):
 #   ansible-playbook playbooks/manage-modules.yml \
 #     -e "instance=test-instance modules=CSSEditor,AdvancedSearch"
+#
+# Update (re-download):
+#   ansible-playbook playbooks/manage-modules.yml \
+#     -e "instance=test-instance modules=CSSEditor module_action=update"
 # =============================================================================
 
-- name: Install Omeka S modules
+- name: Manage Omeka S modules
   hosts: omeka_servers
   become: true
 
   vars:
     omeka_base_dir: /opt/omeka-s
     omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+    module_action: install
 
   pre_tasks:
     - name: Validate parameters
@@ -26,7 +30,8 @@
           - instance is defined
           - instance in omeka_instances
           - modules is defined
-        fail_msg: "Required: -e 'instance=<name> modules=CSSEditor,AdvancedSearch'"
+          - module_action in ['install', 'update']
+        fail_msg: "Required: -e 'instance=<name> modules=CSSEditor,AdvancedSearch' (optional: module_action=update)"
 
     - name: Set instance variables
       ansible.builtin.set_fact:
@@ -38,43 +43,41 @@
       ansible.builtin.set_fact:
         _all_extra_modules: "{{ ((_instance_config.extra_modules | default([])) + _new_modules) | unique }}"
 
-    - name: Show modules to install
+    - name: Show plan
       ansible.builtin.debug:
-        msg: "Extra modules for {{ instance }}: {{ _all_extra_modules | join(', ') }}"
+        msg: "Action: {{ module_action }} | Modules: {{ _all_extra_modules | join(', ') }}"
 
   tasks:
+    # --- Step 1: Update .env to include EXTRA_MODULES ---
     - name: Read current .env file
       ansible.builtin.slurp:
         src: "{{ _instance_dir }}/.env"
       register: _current_env
 
-    - name: Parse current .env content
+    - name: Filter out old EXTRA_MODULES line and build new content
       ansible.builtin.set_fact:
-        _env_lines: "{{ (_current_env.content | b64decode).split('\n') }}"
-
-    - name: Build updated .env content
-      ansible.builtin.set_fact:
-        _updated_env: |
-          {% set found = {'extra_modules': false} %}
-          {% for line in _env_lines %}
-          {% if line.startswith('EXTRA_MODULES=') %}
-          EXTRA_MODULES={{ _all_extra_modules | join(',') }}
-          {% set _ = found.update({'extra_modules': true}) %}
-          {% elif line | trim | length > 0 %}
-          {{ line }}
-          {% endif %}
-          {% endfor %}
-          {% if not found.extra_modules %}
-          EXTRA_MODULES={{ _all_extra_modules | join(',') }}
-          {% endif %}
+        _clean_lines: >-
+          {{ (_current_env.content | b64decode).split('\n')
+             | reject('match', '^EXTRA_MODULES=')
+             | reject('match', '^\s*$')
+             | list }}
+        _extra_modules_line: "EXTRA_MODULES={{ _all_extra_modules | join(',') }}"
 
     - name: Write updated .env file
       ansible.builtin.copy:
-        content: "{{ _updated_env | regex_replace('\\n\\n+', '\\n') }}"
+        content: "{{ (_clean_lines + [_extra_modules_line]) | join('\n') }}\n"
         dest: "{{ _instance_dir }}/.env"
         mode: "0600"
-      register: _env_updated
 
+    # --- Step 2: For updates, remove module dirs so entrypoint re-downloads ---
+    - name: "Remove module directories for update"
+      ansible.builtin.file:
+        path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/modules/{{ item }}"
+        state: absent
+      loop: "{{ _new_modules }}"
+      when: module_action == 'update'
+
+    # --- Step 3: Recreate containers to trigger entrypoint ---
     - name: Recreate containers to trigger module installation
       community.docker.docker_compose_v2:
         project_src: "{{ _instance_dir }}"
@@ -83,8 +86,8 @@
         recreate: always
         wait: true
         wait_timeout: 300
-      when: _env_updated is changed
 
+    # --- Step 4: Health check ---
     - name: Wait for instance to be healthy
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ _instance_config.nginx_port }}/"
@@ -96,6 +99,16 @@
       retries: 30
       delay: 10
 
-    - name: Modules installed
+    # --- Step 5: Verify modules exist ---
+    - name: Check installed modules
+      ansible.builtin.stat:
+        path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/modules/{{ item }}"
+      loop: "{{ _new_modules }}"
+      register: _mod_check
+
+    - name: Report results
       ansible.builtin.debug:
-        msg: "Modules {{ _all_extra_modules | join(', ') }} installed. Activate them in Omeka S admin panel."
+        msg: "{{ item.item }}: {{ 'INSTALLED' if item.stat.exists else 'FAILED' }}"
+      loop: "{{ _mod_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
