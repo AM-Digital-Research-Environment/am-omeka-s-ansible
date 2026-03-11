@@ -3,7 +3,8 @@
 # Install a single Omeka S module into the PHP container.
 # Called from manage-modules.yml with loop_var: mod_name
 #
-# Uses only declarative modules (no shell/command) for Semaphore compatibility.
+# Uses docker_compose_v2_exec (Docker CLI based) instead of
+# docker_container_exec (Python SDK based) for Semaphore compatibility.
 
 - name: "{{ mod_name }} | Validate module is known"
   ansible.builtin.assert:
@@ -12,8 +13,9 @@
     fail_msg: "Unknown module '{{ mod_name }}'. Add it to module_sources in manage-modules.yml."
 
 - name: "{{ mod_name }} | Check if already installed"
-  community.docker.docker_container_exec:
-    container: "{{ _php_container }}"
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+    service: php
     command: "test -d {{ _modules_path }}/{{ mod_name }}"
   register: _mod_check
   ignore_errors: true
@@ -23,18 +25,19 @@
     msg: "Module {{ mod_name }} is already installed."
   when:
     - module_action == 'install'
-    - _mod_check.rc == 0
+    - _mod_check.rc is defined and _mod_check.rc == 0
 
 - name: "{{ mod_name }} | Remove old version (update mode)"
-  community.docker.docker_container_exec:
-    container: "{{ _php_container }}"
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+    service: php
     command: "rm -rf {{ _modules_path }}/{{ mod_name }}"
   when:
     - module_action == 'update'
-    - _mod_check.rc == 0
+    - _mod_check.rc is defined and _mod_check.rc == 0
 
 - name: "{{ mod_name }} | Install module"
-  when: _mod_check.rc != 0 or module_action == 'update'
+  when: (_mod_check.rc is not defined) or (_mod_check.rc != 0) or (module_action == 'update')
   block:
     - name: "{{ mod_name }} | Set module source info"
       ansible.builtin.set_fact:
@@ -73,44 +76,81 @@
         paths: "{{ _mod_tmpdir.path }}"
         file_type: directory
         recurse: false
-        excludes:
-          - "module.zip"
       register: _mod_extracted
 
-    - name: "{{ mod_name }} | Rename extracted directory"
-      ansible.builtin.copy:
-        src: "{{ _mod_extracted.files[0].path }}/"
-        dest: "{{ _mod_tmpdir.path }}/{{ mod_name }}/"
-        remote_src: true
-        mode: preserve
-      when: _mod_extracted.files | length > 0
+    - name: "{{ mod_name }} | Identify extracted folder"
+      ansible.builtin.set_fact:
+        _mod_extracted_dir: "{{ (_mod_extracted.files | rejectattr('path', 'equalto', _mod_tmpdir.path) | first).path }}"
 
-    - name: "{{ mod_name }} | Copy module into PHP container"
+    - name: "{{ mod_name }} | Copy module to instance volume via docker cp"
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+        service: php
+        command: "mkdir -p {{ _modules_path }}/{{ mod_name }}"
+
+    - name: "{{ mod_name }} | Get PHP container ID"
+      community.docker.docker_compose_v2:
+        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+        state: present
+      register: _compose_info
+
+    - name: "{{ mod_name }} | Copy files into container"
       community.docker.docker_container_copy_into:
-        container: "{{ _php_container }}"
-        path: "{{ _mod_tmpdir.path }}/{{ mod_name }}"
+        container: "{{ instance }}-php-1"
+        path: "{{ _mod_extracted_dir }}/"
         container_path: "{{ _modules_path }}/{{ mod_name }}"
         owner_id: 33
         group_id: 33
-      when: _mod_extracted.files | length > 0
+      register: _copy_result
+      ignore_errors: true
+
+    - name: "{{ mod_name }} | Fallback - copy via compose exec"
+      when: _copy_result is failed
+      block:
+        - name: "{{ mod_name }} | Copy files to shared location"
+          ansible.builtin.copy:
+            src: "{{ _mod_extracted_dir }}/"
+            dest: "{{ omeka_instances_dir }}/{{ instance }}/.module_tmp/{{ mod_name }}/"
+            remote_src: true
+            mode: "0775"
+
+        - name: "{{ mod_name }} | Move files inside container"
+          community.docker.docker_compose_v2_exec:
+            project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+            service: php
+            command: "bash -c 'cp -r /var/www/html/.module_tmp/{{ mod_name }}/* {{ _modules_path }}/{{ mod_name }}/ 2>/dev/null || true'"
+
+        - name: "{{ mod_name }} | Clean up shared location"
+          ansible.builtin.file:
+            path: "{{ omeka_instances_dir }}/{{ instance }}/.module_tmp"
+            state: absent
+
+    - name: "{{ mod_name }} | Set ownership in container"
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+        service: php
+        command: "chown -R www-data:www-data {{ _modules_path }}/{{ mod_name }}"
 
     - name: "{{ mod_name }} | Set permissions in container"
-      community.docker.docker_container_exec:
-        container: "{{ _php_container }}"
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+        service: php
         command: "chmod -R 775 {{ _modules_path }}/{{ mod_name }}"
 
     - name: "{{ mod_name }} | Check for composer.json"
-      community.docker.docker_container_exec:
-        container: "{{ _php_container }}"
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+        service: php
         command: "test -f {{ _modules_path }}/{{ mod_name }}/composer.json"
       register: _mod_composer
       ignore_errors: true
 
     - name: "{{ mod_name }} | Install composer dependencies"
-      community.docker.docker_container_exec:
-        container: "{{ _php_container }}"
+      community.docker.docker_compose_v2_exec:
+        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
+        service: php
         command: "bash -c 'source /usr/local/bin/ensure-composer.sh && ensure_composer && cd {{ _modules_path }}/{{ mod_name }} && composer install --no-dev --quiet'"
-      when: _mod_composer.rc == 0
+      when: _mod_composer.rc is defined and _mod_composer.rc == 0
       ignore_errors: true
 
     - name: "{{ mod_name }} | Clean up temp directory"
