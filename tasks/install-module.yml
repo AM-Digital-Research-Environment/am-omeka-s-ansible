@@ -1,10 +1,10 @@
 ---
 # tasks/install-module.yml
-# Install a single Omeka S module into the PHP container.
+# Install a single Omeka S module by writing directly to the Docker volume.
 # Called from manage-modules.yml with loop_var: mod_name
 #
-# Uses docker_compose_v2_exec (Docker CLI based) instead of
-# docker_container_exec (Python SDK based) for Semaphore compatibility.
+# Uses ONLY file-management modules for Semaphore compatibility.
+# No shell, command, raw, tempfile, or docker exec.
 
 - name: "{{ mod_name }} | Validate module is known"
   ansible.builtin.assert:
@@ -12,152 +12,100 @@
       - mod_name in module_sources
     fail_msg: "Unknown module '{{ mod_name }}'. Add it to module_sources in manage-modules.yml."
 
+- name: "{{ mod_name }} | Set paths"
+  ansible.builtin.set_fact:
+    _vol_modules_path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/modules"
+    _staging_dir: "{{ omeka_instances_dir }}/{{ instance }}/.module_staging/{{ mod_name }}"
+
 - name: "{{ mod_name }} | Check if already installed"
-  community.docker.docker_compose_v2_exec:
-    project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-    service: php
-    command: "test -d {{ _modules_path }}/{{ mod_name }}"
-  register: _mod_check
-  ignore_errors: true
+  ansible.builtin.stat:
+    path: "{{ _vol_modules_path }}/{{ mod_name }}"
+  register: _mod_exists
+  become: true
 
 - name: "{{ mod_name }} | Skip if already installed (install mode)"
   ansible.builtin.debug:
-    msg: "Module {{ mod_name }} is already installed."
+    msg: "Module {{ mod_name }} is already installed. Use module_action=update to reinstall."
   when:
     - module_action == 'install'
-    - _mod_check.rc is defined and _mod_check.rc == 0
+    - _mod_exists.stat.exists | default(false)
 
 - name: "{{ mod_name }} | Remove old version (update mode)"
-  community.docker.docker_compose_v2_exec:
-    project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-    service: php
-    command: "rm -rf {{ _modules_path }}/{{ mod_name }}"
+  ansible.builtin.file:
+    path: "{{ _vol_modules_path }}/{{ mod_name }}"
+    state: absent
+  become: true
   when:
     - module_action == 'update'
-    - _mod_check.rc is defined and _mod_check.rc == 0
+    - _mod_exists.stat.exists | default(false)
 
 - name: "{{ mod_name }} | Install module"
-  when: (_mod_check.rc is not defined) or (_mod_check.rc != 0) or (module_action == 'update')
+  when: not (_mod_exists.stat.exists | default(false)) or module_action == 'update'
   block:
     - name: "{{ mod_name }} | Set module source info"
       ansible.builtin.set_fact:
         _mod_repo: "{{ module_sources[mod_name].repo }}"
         _mod_branch: "{{ module_sources[mod_name].branch }}"
 
-    - name: "{{ mod_name }} | Create temp directory on host"
-      ansible.builtin.tempfile:
+    - name: "{{ mod_name }} | Create staging directory"
+      ansible.builtin.file:
+        path: "{{ _staging_dir }}"
         state: directory
-        prefix: "omeka_module_"
-      register: _mod_tmpdir
+        mode: "0755"
+      become: true
 
     - name: "{{ mod_name }} | Download module archive"
       ansible.builtin.get_url:
         url: "https://github.com/{{ _mod_repo }}/archive/refs/heads/{{ _mod_branch }}.zip"
-        dest: "{{ _mod_tmpdir.path }}/module.zip"
+        dest: "{{ _staging_dir }}/module.zip"
         mode: "0644"
+      become: true
       register: _mod_download
       ignore_errors: true
 
     - name: "{{ mod_name }} | Try tag download if branch failed"
       ansible.builtin.get_url:
         url: "https://github.com/{{ _mod_repo }}/archive/refs/tags/{{ _mod_branch }}.zip"
-        dest: "{{ _mod_tmpdir.path }}/module.zip"
+        dest: "{{ _staging_dir }}/module.zip"
         mode: "0644"
+      become: true
       when: _mod_download is failed
 
-    - name: "{{ mod_name }} | Extract archive on host"
+    - name: "{{ mod_name }} | Extract archive"
       ansible.builtin.unarchive:
-        src: "{{ _mod_tmpdir.path }}/module.zip"
-        dest: "{{ _mod_tmpdir.path }}"
+        src: "{{ _staging_dir }}/module.zip"
+        dest: "{{ _staging_dir }}"
         remote_src: true
+      become: true
 
     - name: "{{ mod_name }} | Find extracted directory"
       ansible.builtin.find:
-        paths: "{{ _mod_tmpdir.path }}"
+        paths: "{{ _staging_dir }}"
         file_type: directory
         recurse: false
       register: _mod_extracted
+      become: true
 
     - name: "{{ mod_name }} | Identify extracted folder"
       ansible.builtin.set_fact:
-        _mod_extracted_dir: "{{ (_mod_extracted.files | rejectattr('path', 'equalto', _mod_tmpdir.path) | first).path }}"
+        _mod_src_dir: "{{ (_mod_extracted.files | rejectattr('path', 'equalto', _staging_dir) | first).path }}"
 
-    - name: "{{ mod_name }} | Copy module to instance volume via docker cp"
-      community.docker.docker_compose_v2_exec:
-        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-        service: php
-        command: "mkdir -p {{ _modules_path }}/{{ mod_name }}"
+    - name: "{{ mod_name }} | Copy module to Docker volume"
+      ansible.builtin.copy:
+        src: "{{ _mod_src_dir }}/"
+        dest: "{{ _vol_modules_path }}/{{ mod_name }}/"
+        remote_src: true
+        owner: "33"
+        group: "33"
+        mode: "0775"
+      become: true
 
-    - name: "{{ mod_name }} | Get PHP container ID"
-      community.docker.docker_compose_v2:
-        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-        state: present
-      register: _compose_info
-
-    - name: "{{ mod_name }} | Copy files into container"
-      community.docker.docker_container_copy_into:
-        container: "{{ instance }}-php-1"
-        path: "{{ _mod_extracted_dir }}/"
-        container_path: "{{ _modules_path }}/{{ mod_name }}"
-        owner_id: 33
-        group_id: 33
-      register: _copy_result
-      ignore_errors: true
-
-    - name: "{{ mod_name }} | Fallback - copy via compose exec"
-      when: _copy_result is failed
-      block:
-        - name: "{{ mod_name }} | Copy files to shared location"
-          ansible.builtin.copy:
-            src: "{{ _mod_extracted_dir }}/"
-            dest: "{{ omeka_instances_dir }}/{{ instance }}/.module_tmp/{{ mod_name }}/"
-            remote_src: true
-            mode: "0775"
-
-        - name: "{{ mod_name }} | Move files inside container"
-          community.docker.docker_compose_v2_exec:
-            project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-            service: php
-            command: "bash -c 'cp -r /var/www/html/.module_tmp/{{ mod_name }}/* {{ _modules_path }}/{{ mod_name }}/ 2>/dev/null || true'"
-
-        - name: "{{ mod_name }} | Clean up shared location"
-          ansible.builtin.file:
-            path: "{{ omeka_instances_dir }}/{{ instance }}/.module_tmp"
-            state: absent
-
-    - name: "{{ mod_name }} | Set ownership in container"
-      community.docker.docker_compose_v2_exec:
-        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-        service: php
-        command: "chown -R www-data:www-data {{ _modules_path }}/{{ mod_name }}"
-
-    - name: "{{ mod_name }} | Set permissions in container"
-      community.docker.docker_compose_v2_exec:
-        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-        service: php
-        command: "chmod -R 775 {{ _modules_path }}/{{ mod_name }}"
-
-    - name: "{{ mod_name }} | Check for composer.json"
-      community.docker.docker_compose_v2_exec:
-        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-        service: php
-        command: "test -f {{ _modules_path }}/{{ mod_name }}/composer.json"
-      register: _mod_composer
-      ignore_errors: true
-
-    - name: "{{ mod_name }} | Install composer dependencies"
-      community.docker.docker_compose_v2_exec:
-        project_src: "{{ omeka_instances_dir }}/{{ instance }}"
-        service: php
-        command: "bash -c 'source /usr/local/bin/ensure-composer.sh && ensure_composer && cd {{ _modules_path }}/{{ mod_name }} && composer install --no-dev --quiet'"
-      when: _mod_composer.rc is defined and _mod_composer.rc == 0
-      ignore_errors: true
-
-    - name: "{{ mod_name }} | Clean up temp directory"
+    - name: "{{ mod_name }} | Clean up staging directory"
       ansible.builtin.file:
-        path: "{{ _mod_tmpdir.path }}"
+        path: "{{ omeka_instances_dir }}/{{ instance }}/.module_staging"
         state: absent
+      become: true
 
-    - name: "{{ mod_name }} | Module installed successfully"
+    - name: "{{ mod_name }} | Module installed"
       ansible.builtin.debug:
-        msg: "Module {{ mod_name }} installed. Activate it in Omeka S admin panel."
+        msg: "Module {{ mod_name }} installed to {{ _vol_modules_path }}/{{ mod_name }}/. Activate it in Omeka S admin."
