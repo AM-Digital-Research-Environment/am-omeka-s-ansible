@@ -28,7 +28,6 @@
       args:
         chdir: "{{ _instance_dir }}"
       become: true
-      become_user: "{{ deploy_user }}"
       register: update_result
       changed_when: "'updated' in update_result.stdout or 'Updated' in update_result.stdout"
 
@@ -37,16 +36,19 @@
         var: update_result.stdout_lines
 
     - name: Rebuild and restart containers
-      ansible.builtin.shell: |
-        docker compose build --pull && docker compose up -d
-      args:
-        chdir: "{{ _instance_dir }}"
+      community.docker.docker_compose_v2:
+        project_src: "{{ _instance_dir }}"
+        state: present
+        pull: always
+        wait: true
+        wait_timeout: 120
+      become: true
 
     - name: Wait for instance to be healthy
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ omeka_instances[instance].nginx_port }}/"
-        status_code: [200, 302]
+        status_code: [200, 301, 302, 401, 403]
       register: health
-      until: health.status in [200, 302]
+      until: health is succeeded
       retries: 36
       delay: 5

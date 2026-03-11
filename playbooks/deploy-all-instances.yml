@@ -28,10 +28,16 @@
       loop_control:
         label: "{{ item.key }}"
 
+    - name: Check if Caddy is installed
+      ansible.builtin.stat:
+        path: /usr/bin/caddy
+      register: _caddy_binary
+
     - name: Reload Caddy to pick up any new instances
       ansible.builtin.service:
         name: caddy
         state: reloaded
+      when: _caddy_binary.stat.exists
 
     - name: Set up backups
       ansible.builtin.include_role:

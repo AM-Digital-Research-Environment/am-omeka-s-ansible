@@ -27,7 +27,13 @@
         instance_config: "{{ omeka_instances[instance] }}"
         instance_secrets: "{{ omeka_instance_secrets[instance] }}"
 
+    - name: Check if Caddy is installed
+      ansible.builtin.stat:
+        path: /usr/bin/caddy
+      register: _caddy_binary
+
     - name: Reload Caddy
       ansible.builtin.service:
         name: caddy
         state: reloaded
+      when: _caddy_binary.stat.exists

@@ -1,0 +1,61 @@
+---
+# =============================================================================
+# Show status of all Omeka S instances on target servers
+# Usage: ansible-playbook playbooks/status.yml --limit server1
+# =============================================================================
+
+- name: Omeka S instance status
+  hosts: omeka_servers
+  become: true
+
+  tasks:
+    - name: List instance directories
+      ansible.builtin.find:
+        paths: "{{ omeka_instances_dir }}"
+        file_type: directory
+        recurse: false
+      register: _instance_dirs
+
+    - name: Show configured instances
+      ansible.builtin.debug:
+        msg: |
+          Configured instances: {{ omeka_instances.keys() | list | join(', ') }}
+          Instance directories found: {{ _instance_dirs.files | map(attribute='path') | map('basename') | list | join(', ') }}
+
+    - name: Check container status for each instance
+      community.docker.docker_compose_v2:
+        project_src: "{{ omeka_instances_dir }}/{{ item.key }}"
+        state: present
+        dry_run: true
+      become: true
+      loop: "{{ omeka_instances | dict2items }}"
+      loop_control:
+        loop_var: item
+        label: "{{ item.key }}"
+      register: _compose_status
+      ignore_errors: true
+
+    - name: Check HTTP response for each instance
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ item.value.nginx_port }}/"
+        method: GET
+        status_code: [200, 301, 302, 401, 403]
+        timeout: 5
+      loop: "{{ omeka_instances | dict2items }}"
+      loop_control:
+        loop_var: item
+        label: "{{ item.key }}"
+      register: _http_status
+      ignore_errors: true
+
+    - name: Instance status summary
+      ansible.builtin.debug:
+        msg: |
+          === {{ item.item.key }} ===
+            Domain: {{ item.item.value.domain }}
+            Port: {{ item.item.value.nginx_port }}
+            HTTP: {{ item.status | default('UNREACHABLE') }}
+            URL: http://127.0.0.1:{{ item.item.value.nginx_port }}/
+      loop: "{{ _http_status.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
