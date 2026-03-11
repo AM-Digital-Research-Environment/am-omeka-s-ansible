@@ -2,38 +2,24 @@
 # roles/omeka_instance/tasks/deploy.yml
 # Build and start the Docker Compose stack for the instance.
 
-- name: "{{ instance_name }} | Check for compose files"
-  ansible.builtin.find:
-    paths: "{{ omeka_instances_dir }}/{{ instance_name }}"
-    patterns:
-      - "docker-compose.yml"
-      - "docker-compose.yaml"
-      - "compose.yml"
-      - "compose.yaml"
-  register: _compose_files
+- name: "{{ instance_name }} | Check instance directory type"
+  ansible.builtin.raw: "file {{ omeka_instances_dir }}/{{ instance_name }} && ls {{ omeka_instances_dir }}/{{ instance_name }}/docker-compose.yml 2>&1"
   become: true
+  register: _dir_check
+  changed_when: false
 
-- name: "{{ instance_name }} | Show found compose files"
+- name: "{{ instance_name }} | Show directory check"
   ansible.builtin.debug:
-    msg: "Found compose files: {{ _compose_files.files | map(attribute='path') | list }}"
-
-- name: "{{ instance_name }} | Fail if no compose file found"
-  ansible.builtin.fail:
-    msg: "No docker-compose.yml or compose.yml found at {{ omeka_instances_dir }}/{{ instance_name }}/"
-  when: _compose_files.matched == 0
+    var: _dir_check.stdout_lines
 
 - name: "{{ instance_name }} | Build Docker images"
-  ansible.builtin.shell:
-    cmd: docker compose build --pull
-    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  ansible.builtin.raw: "cd {{ omeka_instances_dir }}/{{ instance_name }} && docker compose build --pull 2>&1"
   become: true
   register: _docker_build
-  changed_when: "'writing image' in (_docker_build.stdout | default('')) or 'exporting layers' in (_docker_build.stdout | default(''))"
+  changed_when: "'writing image' in _docker_build.stdout or 'exporting layers' in _docker_build.stdout"
 
 - name: "{{ instance_name }} | Start containers"
-  ansible.builtin.shell:
-    cmd: docker compose up -d
-    chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  ansible.builtin.raw: "cd {{ omeka_instances_dir }}/{{ instance_name }} && docker compose up -d 2>&1"
   become: true
   register: _docker_up
-  changed_when: "'Started' in (_docker_up.stderr | default('')) or 'Creating' in (_docker_up.stderr | default('')) or 'Recreat' in (_docker_up.stderr | default(''))"
+  changed_when: "'Started' in _docker_up.stdout or 'Creating' in _docker_up.stdout or 'Recreat' in _docker_up.stdout"

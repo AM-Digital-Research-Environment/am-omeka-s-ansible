@@ -2,8 +2,8 @@
 # roles/omeka_instance/tasks/clone.yml
 # Create instance directory and clone/update the omeka-s-docker repository.
 
-- name: "{{ instance_name }} | Debug — show hostname and instance path"
-  ansible.builtin.shell: "hostname && echo '---' && ls -la {{ omeka_instances_dir }}/ 2>&1 || true"
+- name: "{{ instance_name }} | Debug — check target host"
+  ansible.builtin.raw: "hostname && echo '---' && ls -la {{ omeka_instances_dir }}/ 2>/dev/null || echo 'dir not found'"
   become: true
   register: _debug_info
   changed_when: false
@@ -42,7 +42,7 @@
   become: true
 
 - name: "{{ instance_name }} | Verify clone contents"
-  ansible.builtin.shell: "ls -la {{ omeka_instances_dir }}/{{ instance_name }}/"
+  ansible.builtin.raw: "ls -la {{ omeka_instances_dir }}/{{ instance_name }}/"
   become: true
   register: _clone_contents
   changed_when: false
