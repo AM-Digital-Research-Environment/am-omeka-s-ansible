@@ -8,6 +8,10 @@
   hosts: omeka_servers
   become: true
 
+  vars:
+    omeka_base_dir: /opt/omeka-s
+    omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+
   tasks:
     - name: List instance directories
       ansible.builtin.find:
