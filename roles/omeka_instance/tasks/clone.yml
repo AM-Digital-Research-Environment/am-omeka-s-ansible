@@ -2,29 +2,35 @@
 # roles/omeka_instance/tasks/clone.yml
 # Create instance directory and clone/update the omeka-s-docker repository.
 
+- name: "{{ instance_name }} | Debug — show hostname and instance path"
+  ansible.builtin.shell: "hostname && echo '---' && ls -la {{ omeka_instances_dir }}/ 2>&1 || true"
+  become: true
+  register: _debug_info
+  changed_when: false
+
+- name: "{{ instance_name }} | Debug output"
+  ansible.builtin.debug:
+    var: _debug_info.stdout_lines
+
+- name: "{{ instance_name }} | Check if instance path exists"
+  ansible.builtin.stat:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  become: true
+  register: _instance_path
+
+- name: "{{ instance_name }} | Remove stale instance path if not a directory"
+  ansible.builtin.file:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    state: absent
+  become: true
+  when: _instance_path.stat.exists and not _instance_path.stat.isdir
+
 - name: "{{ instance_name }} | Ensure instances base directory exists"
   ansible.builtin.file:
     path: "{{ omeka_instances_dir }}"
     state: directory
     mode: "0755"
   become: true
-
-- name: "{{ instance_name }} | Create instance directory"
-  ansible.builtin.file:
-    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
-    state: directory
-    mode: "0755"
-  become: true
-
-- name: "{{ instance_name }} | Debug connection target"
-  ansible.builtin.command: hostname
-  become: true
-  register: _hostname
-  changed_when: false
-
-- name: "{{ instance_name }} | Show connection info"
-  ansible.builtin.debug:
-    msg: "Running on: {{ _hostname.stdout }} | Connection: {{ ansible_connection | default('unknown') }}"
 
 - name: "{{ instance_name }} | Clone or update omeka-s-docker repository"
   ansible.builtin.git:
@@ -35,12 +41,12 @@
     update: true
   become: true
 
-- name: "{{ instance_name }} | List cloned directory contents"
-  ansible.builtin.command: ls -la {{ omeka_instances_dir }}/{{ instance_name }}/
+- name: "{{ instance_name }} | Verify clone contents"
+  ansible.builtin.shell: "ls -la {{ omeka_instances_dir }}/{{ instance_name }}/"
   become: true
-  register: _dir_list
+  register: _clone_contents
   changed_when: false
 
-- name: "{{ instance_name }} | Show directory contents"
+- name: "{{ instance_name }} | Show clone contents"
   ansible.builtin.debug:
-    var: _dir_list.stdout_lines
+    var: _clone_contents.stdout_lines
