@@ -294,6 +294,24 @@ Create a template for each playbook you want to run from the UI:
 
 Use **CLI args** to add `--check` for dry runs or `--diff` to see changes.
 
+## Troubleshooting / Known Issues
+
+### Semaphore inventory: do NOT name the host `localhost`
+
+Ansible treats `localhost` specially and forces `connection: local`, causing tasks to run inside the Semaphore container instead of on the remote server. Use any other hostname (e.g., `myserver`, `sandbox`) with `ansible_host: <ip>`.
+
+### Shell/command/raw modules skip in Semaphore
+
+The `ansible.builtin.shell`, `ansible.builtin.command`, and `ansible.builtin.raw` modules silently skip tasks when running via Semaphore. All roles use only declarative modules (`stat`, `file`, `git`, `template`, `community.docker.docker_compose_v2`, etc.) to avoid this issue.
+
+### Disk space
+
+Ensure the target server has sufficient disk space before deployment. Docker images and MySQL data require significant storage. If disk fills up, MySQL and PostgreSQL (Semaphore DB) will crash. Use `sudo docker system prune -a` to reclaim space from unused images.
+
+### MySQL initialization
+
+On first deployment, MySQL needs time to initialize. If the DB container enters a restart loop, check logs with `sudo docker logs <container-name>` and ensure sufficient disk space and memory.
+
 ## Verification
 
 ```bash
