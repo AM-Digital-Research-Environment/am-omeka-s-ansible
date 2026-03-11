@@ -2,7 +2,7 @@
 # roles/omeka_instance/defaults/main.yml
 # Defaults for the omeka_instance role — all can be overridden.
 
-omeka_docker_repo: "https://github.com/AM-Digital-Research-Environment/am-omeka-s-docker-bootstrap.git"
+omeka_docker_repo: "https://github.com/AM-Digital-Research-Environment/omeka-s-docker.git"
 omeka_docker_branch: "main"
 
 omeka_base_dir: "/opt/omeka-s"
