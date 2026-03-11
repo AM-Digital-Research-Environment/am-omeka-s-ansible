@@ -2,15 +2,16 @@
 # roles/omeka_instance/tasks/deploy.yml
 # Build and start the Docker Compose stack for the instance.
 
-- name: "{{ instance_name }} | Pull and build Docker images"
+- name: "{{ instance_name }} | Pull images and start containers"
   community.docker.docker_compose_v2:
     project_src: "{{ omeka_instances_dir }}/{{ instance_name }}"
     state: present
     pull: always
+    wait: false
   become: true
   register: _docker_compose
 
-- name: "{{ instance_name }} | Show Docker Compose result"
+- name: "{{ instance_name }} | Show running containers"
   ansible.builtin.debug:
     msg: "Containers: {{ _docker_compose.containers | default([]) | map(attribute='Name') | list }}"
   when: _docker_compose.containers is defined
