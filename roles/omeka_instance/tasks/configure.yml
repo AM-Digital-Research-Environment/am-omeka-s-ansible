@@ -6,7 +6,5 @@
   ansible.builtin.template:
     src: env.j2
     dest: "{{ omeka_instances_dir }}/{{ instance_name }}/.env"
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_group }}"
     mode: "0600"
   notify: restart omeka instance

@@ -13,15 +13,16 @@
 
 - name: Create per-instance backup directories
   ansible.builtin.file:
-    path: "{{ backup_base_dir }}/{{ item.key }}"
+    path: "{{ backup_base_dir }}/{{ backup_instance.key }}"
     state: directory
     owner: root
     group: root
     mode: "0750"
   loop: "{{ omeka_instances | dict2items }}"
   loop_control:
-    label: "{{ item.key }}"
-  when: item.value.backup_enabled | default(false)
+    loop_var: backup_instance
+    label: "{{ backup_instance.key }}"
+  when: backup_instance.value.backup_enabled | default(false)
   become: true
 
 - name: Template backup script
@@ -35,19 +36,20 @@
 
 - name: Set up cron jobs for each backup-enabled instance
   ansible.builtin.cron:
-    name: "omeka-backup-{{ item.key }}"
-    job: "/usr/local/bin/omeka-backup.sh {{ item.key }} >> /var/log/omeka-backup-{{ item.key }}.log 2>&1"
-    cron_file: "omeka-backup-{{ item.key }}"
+    name: "omeka-backup-{{ cron_instance.key }}"
+    job: "/usr/local/bin/omeka-backup.sh {{ cron_instance.key }} >> /var/log/omeka-backup-{{ cron_instance.key }}.log 2>&1"
+    cron_file: "omeka-backup-{{ cron_instance.key }}"
     user: root
-    minute: "{{ item.value.backup_schedule.split(' ')[0] }}"
-    hour: "{{ item.value.backup_schedule.split(' ')[1] }}"
-    day: "{{ item.value.backup_schedule.split(' ')[2] }}"
-    month: "{{ item.value.backup_schedule.split(' ')[3] }}"
-    weekday: "{{ item.value.backup_schedule.split(' ')[4] }}"
+    minute: "{{ cron_instance.value.backup_schedule.split(' ')[0] }}"
+    hour: "{{ cron_instance.value.backup_schedule.split(' ')[1] }}"
+    day: "{{ cron_instance.value.backup_schedule.split(' ')[2] }}"
+    month: "{{ cron_instance.value.backup_schedule.split(' ')[3] }}"
+    weekday: "{{ cron_instance.value.backup_schedule.split(' ')[4] }}"
   loop: "{{ omeka_instances | dict2items }}"
   loop_control:
-    label: "{{ item.key }}"
-  when: item.value.backup_enabled | default(false)
+    loop_var: cron_instance
+    label: "{{ cron_instance.key }}"
+  when: cron_instance.value.backup_enabled | default(false)
   become: true
 
 - name: Set up cron job for backup rotation cleanup

@@ -4,9 +4,11 @@
 
 - name: "{{ instance_name }} | Install extra modules"
   ansible.builtin.shell:
-    cmd: "bash scripts/install-module.sh {{ item }}"
+    cmd: "bash scripts/install-module.sh {{ module_name }}"
     chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
   loop: "{{ instance_config.extra_modules }}"
+  loop_control:
+    loop_var: module_name
   register: _module_install
   changed_when: "'already installed' not in _module_install.stdout"
   when:

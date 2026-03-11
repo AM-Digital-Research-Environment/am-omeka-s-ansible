@@ -4,9 +4,11 @@
 
 - name: "{{ instance_name }} | Install extra themes"
   ansible.builtin.shell:
-    cmd: "bash scripts/install-theme.sh {{ item }}"
+    cmd: "bash scripts/install-theme.sh {{ theme_name }}"
     chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
   loop: "{{ instance_config.extra_themes }}"
+  loop_control:
+    loop_var: theme_name
   register: _theme_install
   changed_when: "'already installed' not in _theme_install.stdout"
   when:

@@ -6,8 +6,6 @@
   ansible.builtin.file:
     path: "{{ omeka_instances_dir }}"
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_group }}"
     mode: "0755"
   become: true
 
@@ -15,8 +13,6 @@
   ansible.builtin.file:
     path: "{{ omeka_instances_dir }}/{{ instance_name }}"
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_group }}"
     mode: "0755"
   become: true
 
@@ -27,14 +23,4 @@
     version: "{{ omeka_docker_branch }}"
     force: false
     update: true
-  become: true
-  become_user: "{{ deploy_user }}"
-
-- name: "{{ instance_name }} | Set ownership of instance directory"
-  ansible.builtin.file:
-    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
-    state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_group }}"
-    recurse: true
   become: true

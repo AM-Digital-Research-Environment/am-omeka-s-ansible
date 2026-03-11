@@ -20,9 +20,11 @@
 - name: Allow TCP ports through firewall
   community.general.ufw:
     rule: allow
-    port: "{{ item }}"
+    port: "{{ tcp_port }}"
     proto: tcp
   loop: "{{ firewall_allowed_tcp_ports }}"
+  loop_control:
+    loop_var: tcp_port
   become: true
 
 - name: Enable ufw

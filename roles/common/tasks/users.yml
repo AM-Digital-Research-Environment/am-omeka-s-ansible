@@ -36,8 +36,10 @@
 - name: Set authorized_keys for deploy user
   ansible.posix.authorized_key:
     user: "{{ deploy_user }}"
-    key: "{{ item }}"
+    key: "{{ ssh_key }}"
     state: present
   loop: "{{ deploy_ssh_keys }}"
+  loop_control:
+    loop_var: ssh_key
   become: true
   when: deploy_ssh_keys | length > 0
