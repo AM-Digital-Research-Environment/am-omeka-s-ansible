@@ -3,7 +3,8 @@
 # Install a single Omeka S module by writing directly to the Docker volume.
 # Called from manage-modules.yml with loop_var: mod_name
 #
-# Uses ONLY file-management modules for Semaphore compatibility.
+# Downloads on the Ansible controller and extracts on the remote in one step.
+# No intermediate files on the remote needed.
 
 - name: "{{ mod_name }} | Validate module is known"
   ansible.builtin.assert:
@@ -14,7 +15,6 @@
 - name: "{{ mod_name }} | Set paths"
   ansible.builtin.set_fact:
     _vol_modules_path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/modules"
-    _dl_dest: "/tmp/omeka_module_{{ mod_name }}.zip"
 
 - name: "{{ mod_name }} | Check if already installed"
   ansible.builtin.stat:
@@ -46,80 +46,61 @@
         _mod_repo: "{{ module_sources[mod_name].repo }}"
         _mod_branch: "{{ module_sources[mod_name].branch }}"
 
-    - name: "{{ mod_name }} | Download module archive"
-      ansible.builtin.get_url:
-        url: "https://github.com/{{ _mod_repo }}/archive/refs/heads/{{ _mod_branch }}.zip"
-        dest: "{{ _dl_dest }}"
-        mode: "0644"
-        force: true
+    - name: "{{ mod_name }} | Download and extract module to Docker volume"
+      ansible.builtin.unarchive:
+        src: "https://github.com/{{ _mod_repo }}/archive/refs/heads/{{ _mod_branch }}.zip"
+        dest: "{{ _vol_modules_path }}"
+        remote_src: false
       become: true
-      register: _mod_download
+      register: _mod_extract
       ignore_errors: true
 
-    - name: "{{ mod_name }} | Try tag download if branch failed"
-      ansible.builtin.get_url:
-        url: "https://github.com/{{ _mod_repo }}/archive/refs/tags/{{ _mod_branch }}.zip"
-        dest: "{{ _dl_dest }}"
-        mode: "0644"
-        force: true
-      become: true
-      when: _mod_download is failed
-
-    - name: "{{ mod_name }} | Extract archive directly to Docker volume"
+    - name: "{{ mod_name }} | Try tag URL if branch failed"
       ansible.builtin.unarchive:
-        src: "{{ _dl_dest }}"
+        src: "https://github.com/{{ _mod_repo }}/archive/refs/tags/{{ _mod_branch }}.zip"
         dest: "{{ _vol_modules_path }}"
-        remote_src: true
+        remote_src: false
       become: true
+      when: _mod_extract is failed
 
-    - name: "{{ mod_name }} | Find extracted directory in volume"
+    - name: "{{ mod_name }} | Find extracted directory"
       ansible.builtin.find:
         paths: "{{ _vol_modules_path }}"
-        patterns: "*{{ mod_name }}*,*{{ _mod_repo | regex_replace('.*/','') }}*"
+        patterns: "*{{ _mod_repo | regex_replace('.*/','') }}*"
         file_type: directory
         recurse: false
       register: _mod_extracted
       become: true
 
-    - name: "{{ mod_name }} | Identify extracted folder"
-      ansible.builtin.set_fact:
-        _mod_src_dir: "{{ (_mod_extracted.files | sort(attribute='path') | last).path }}"
-      when: _mod_extracted.files | length > 0
-
-    - name: "{{ mod_name }} | Rename extracted folder to module name"
+    - name: "{{ mod_name }} | Rename to correct module name"
       ansible.builtin.copy:
-        src: "{{ _mod_src_dir }}/"
+        src: "{{ _mod_extracted.files[0].path }}/"
         dest: "{{ _vol_modules_path }}/{{ mod_name }}/"
         remote_src: true
         owner: "33"
         group: "33"
         mode: "0775"
       become: true
-      when: _mod_src_dir != (_vol_modules_path + '/' + mod_name)
+      when:
+        - _mod_extracted.files | length > 0
+        - _mod_extracted.files[0].path != (_vol_modules_path + '/' + mod_name)
 
-    - name: "{{ mod_name }} | Remove extracted archive folder"
+    - name: "{{ mod_name }} | Remove archive-named folder"
       ansible.builtin.file:
-        path: "{{ _mod_src_dir }}"
+        path: "{{ _mod_extracted.files[0].path }}"
         state: absent
       become: true
       when:
-        - _mod_src_dir is defined
-        - _mod_src_dir != (_vol_modules_path + '/' + mod_name)
+        - _mod_extracted.files | length > 0
+        - _mod_extracted.files[0].path != (_vol_modules_path + '/' + mod_name)
 
-    - name: "{{ mod_name }} | Set ownership on module"
+    - name: "{{ mod_name }} | Set ownership"
       ansible.builtin.file:
         path: "{{ _vol_modules_path }}/{{ mod_name }}"
         state: directory
         recurse: true
         owner: "33"
         group: "33"
-        mode: "0775"
-      become: true
-
-    - name: "{{ mod_name }} | Clean up download"
-      ansible.builtin.file:
-        path: "{{ _dl_dest }}"
-        state: absent
       become: true
 
     - name: "{{ mod_name }} | Module installed"
