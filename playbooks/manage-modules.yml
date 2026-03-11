@@ -2,13 +2,17 @@
 # =============================================================================
 # Install or update modules for an instance
 # Usage:
-#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main action=install modules=CSVImport,UniversalViewer"
-#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main action=update modules=CSVImport"
+#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main module_action=install modules=CSVImport,UniversalViewer"
+#   ansible-playbook playbooks/manage-modules.yml -e "instance=archives-main module_action=update modules=CSVImport"
 # =============================================================================
 
 - name: Manage Omeka S modules
   hosts: omeka_servers
   become: true
+
+  vars:
+    omeka_base_dir: /opt/omeka-s
+    omeka_instances_dir: "{{ omeka_base_dir }}/instances"
 
   pre_tasks:
     - name: Validate parameters
@@ -16,19 +20,19 @@
         that:
           - instance is defined
           - instance in omeka_instances
-          - action is defined
-          - action in ['install', 'update']
+          - module_action is defined
+          - module_action in ['install', 'update']
           - modules is defined
-        fail_msg: "Required: -e 'instance=<name> action=install|update modules=Mod1,Mod2'"
+        fail_msg: "Required: -e 'instance=<name> module_action=install|update modules=Mod1,Mod2'"
 
     - name: Set instance directory
       ansible.builtin.set_fact:
         _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
 
   tasks:
-    - name: "{{ action | capitalize }} modules"
+    - name: "{{ module_action | capitalize }} modules"
       ansible.builtin.shell: |
-        bash scripts/{{ (action == 'install') | ternary('install-module.sh', 'update-module.sh') }} {{ item }}
+        bash scripts/{{ (module_action == 'install') | ternary('install-module.sh', 'update-module.sh') }} {{ item }}
       args:
         chdir: "{{ _instance_dir }}"
       loop: "{{ modules.split(',') }}"

@@ -2,12 +2,16 @@
 # =============================================================================
 # Install or update themes for an instance
 # Usage:
-#   ansible-playbook playbooks/manage-themes.yml -e "instance=archives-main action=install themes=ColorMe,CenterRow"
+#   ansible-playbook playbooks/manage-themes.yml -e "instance=archives-main theme_action=install themes=ColorMe,CenterRow"
 # =============================================================================
 
 - name: Manage Omeka S themes
   hosts: omeka_servers
   become: true
+
+  vars:
+    omeka_base_dir: /opt/omeka-s
+    omeka_instances_dir: "{{ omeka_base_dir }}/instances"
 
   pre_tasks:
     - name: Validate parameters
@@ -15,17 +19,17 @@
         that:
           - instance is defined
           - instance in omeka_instances
-          - action is defined
-          - action in ['install', 'update']
+          - theme_action is defined
+          - theme_action in ['install', 'update']
           - themes is defined
-        fail_msg: "Required: -e 'instance=<name> action=install|update themes=Theme1,Theme2'"
+        fail_msg: "Required: -e 'instance=<name> theme_action=install|update themes=Theme1,Theme2'"
 
     - name: Set instance directory
       ansible.builtin.set_fact:
         _instance_dir: "{{ omeka_instances_dir }}/{{ instance }}"
 
   tasks:
-    - name: "{{ action | capitalize }} themes"
+    - name: "{{ theme_action | capitalize }} themes"
       ansible.builtin.shell: |
         bash scripts/install-theme.sh {{ item }}
       args:

@@ -8,6 +8,10 @@
   hosts: omeka_servers
   become: true
 
+  vars:
+    omeka_base_dir: /opt/omeka-s
+    omeka_instances_dir: "{{ omeka_base_dir }}/instances"
+
   pre_tasks:
     - name: Validate parameters
       ansible.builtin.assert:
