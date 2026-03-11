@@ -4,6 +4,13 @@
     name: fail2ban
     state: present
   become: true
+  register: _fail2ban_install
+
+- name: Reload systemd after fail2ban install
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+  when: _fail2ban_install.changed
 
 - name: Configure fail2ban jail.local
   ansible.builtin.template:
@@ -14,11 +21,6 @@
     mode: "0644"
   become: true
   notify: restart fail2ban
-
-- name: Reload systemd daemon
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
 
 - name: Enable and start fail2ban
   ansible.builtin.systemd:
