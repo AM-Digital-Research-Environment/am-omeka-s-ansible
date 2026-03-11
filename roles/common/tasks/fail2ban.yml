@@ -15,6 +15,11 @@
   become: true
   notify: restart fail2ban
 
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
 - name: Enable and start fail2ban
   ansible.builtin.systemd:
     name: fail2ban
