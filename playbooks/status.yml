@@ -26,19 +26,6 @@
           Configured instances: {{ omeka_instances.keys() | list | join(', ') }}
           Instance directories found: {{ _instance_dirs.files | map(attribute='path') | map('basename') | list | join(', ') }}
 
-    - name: Check container status for each instance
-      community.docker.docker_compose_v2:
-        project_src: "{{ omeka_instances_dir }}/{{ item.key }}"
-        state: present
-        dry_run: true
-      become: true
-      loop: "{{ omeka_instances | dict2items }}"
-      loop_control:
-        loop_var: item
-        label: "{{ item.key }}"
-      register: _compose_status
-      ignore_errors: true
-
     - name: Check HTTP response for each instance
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ item.value.nginx_port }}/"
@@ -58,8 +45,9 @@
           === {{ item.item.key }} ===
             Domain: {{ item.item.value.domain }}
             Port: {{ item.item.value.nginx_port }}
-            HTTP: {{ item.status | default('UNREACHABLE') }}
-            URL: http://127.0.0.1:{{ item.item.value.nginx_port }}/
+            Omeka Version: {{ item.item.value.omeka_version }}
+            HTTP Status: {{ item.status | default('UNREACHABLE') }}
+            Backup Enabled: {{ item.item.value.backup_enabled | default(false) }}
       loop: "{{ _http_status.results }}"
       loop_control:
         label: "{{ item.item.key }}"
