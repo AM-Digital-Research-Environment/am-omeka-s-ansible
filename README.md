@@ -206,13 +206,93 @@ docker compose -f docker-compose.semaphore.yml up -d
 
 Open `http://<server-ip>:3000` and log in with credentials from `.env`.
 
-### Connecting to this repo in Semaphore
+### Configuring Semaphore
 
-1. **Key Store** — add SSH keys or vault passwords
-2. **Repositories** — point to this repo (local path or Git URL)
-3. **Inventory** — select `inventories/production/hosts.yml`
-4. **Environment** — set any extra variables
-5. **Task Templates** — create templates for each playbook (e.g. `playbooks/site.yml`)
+#### 1. Generate an SSH key for Semaphore
+
+```bash
+ssh-keygen -t ed25519 -f /tmp/semaphore_key -N "" -C semaphore
+```
+
+Add the public key to the target server's authorized_keys:
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+cat /tmp/semaphore_key.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+Ensure the target user has passwordless sudo:
+
+```bash
+sudo bash -c 'echo "<username> ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/<username>'
+```
+
+#### 2. Create a project
+
+Click **New Project** and name it (e.g. `Omeka S Ansible`).
+
+#### 3. Key Store
+
+Create two keys:
+
+| Key Name | Type | Notes |
+|----------|------|-------|
+| `local-access` | None | Used for public repo access |
+| `ssh-key` | SSH Key | Paste the private key from `/tmp/semaphore_key` |
+
+#### 4. Repository
+
+| Field | Value |
+|-------|-------|
+| Name | `am-omeka-s-ansible` |
+| URL | `https://github.com/AM-Digital-Research-Environment/am-omeka-s-ansible.git` |
+| Branch | `main` |
+| Access Key | `local-access` |
+
+#### 5. Inventory
+
+| Field | Value |
+|-------|-------|
+| Name | `Production` (or `Staging`) |
+| Type | `Static` |
+| SSH Key | `ssh-key` |
+
+Paste a static YAML inventory:
+
+```yaml
+all:
+  children:
+    omeka_servers:
+      hosts:
+        myserver:
+          ansible_host: <server-ip>
+          ansible_user: <username>
+          ansible_python_interpreter: /usr/bin/python3
+          omeka_instances:
+            my-instance:
+              domain: omeka.example.edu
+              omeka_version: "4.2.0"
+              nginx_port: 8081
+              extra_modules: []
+              extra_themes: []
+              backup_enabled: false
+          omeka_instance_secrets:
+            my-instance:
+              mysql_password: "CHANGE_ME"
+```
+
+#### 6. Task Templates
+
+Create a template for each playbook you want to run from the UI:
+
+| Name | Playbook | Inventory | Repository |
+|------|----------|-----------|------------|
+| Server Setup | `playbooks/server-setup.yml` | Production | am-omeka-s-ansible |
+| Deploy All Instances | `playbooks/deploy-all-instances.yml` | Production | am-omeka-s-ansible |
+| Backup | `playbooks/backup.yml` | Production | am-omeka-s-ansible |
+
+Use **CLI args** to add `--check` for dry runs or `--diff` to see changes.
 
 ## Verification
 
