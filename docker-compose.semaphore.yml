@@ -1,0 +1,55 @@
+# Semaphore UI — Web interface for Ansible
+# Usage:
+#   docker compose -f docker-compose.semaphore.yml up -d
+#   Open http://localhost:3000 (or http://<server-ip>:3000)
+#
+# Default login: admin / changeme (change after first login)
+
+services:
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SEMAPHORE_DB_USER: semaphore
+      SEMAPHORE_DB_PASS: ${SEMAPHORE_DB_PASS:-semaphore_secret}
+      SEMAPHORE_DB_HOST: postgres
+      SEMAPHORE_DB_PORT: "5432"
+      SEMAPHORE_DB_DIALECT: postgres
+      SEMAPHORE_DB: semaphore
+      SEMAPHORE_PLAYBOOK_PATH: /tmp/semaphore/
+      SEMAPHORE_ADMIN: ${SEMAPHORE_ADMIN:-admin}
+      SEMAPHORE_ADMIN_PASSWORD: ${SEMAPHORE_ADMIN_PASSWORD:-changeme}
+      SEMAPHORE_ADMIN_NAME: ${SEMAPHORE_ADMIN_NAME:-Admin}
+      SEMAPHORE_ADMIN_EMAIL: ${SEMAPHORE_ADMIN_EMAIL:-admin@example.edu}
+      SEMAPHORE_ACCESS_KEY_ENCRYPTION: ${SEMAPHORE_ACCESS_KEY_ENCRYPTION:-}
+      ANSIBLE_HOST_KEY_CHECKING: "false"
+      TZ: Europe/Berlin
+    volumes:
+      - semaphore_config:/etc/semaphore
+      - semaphore_tmp:/tmp/semaphore
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    hostname: postgres
+    environment:
+      POSTGRES_USER: semaphore
+      POSTGRES_PASSWORD: ${SEMAPHORE_DB_PASS:-semaphore_secret}
+      POSTGRES_DB: semaphore
+    volumes:
+      - semaphore_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semaphore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  semaphore_postgres:
+  semaphore_config:
+  semaphore_tmp:

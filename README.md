@@ -22,19 +22,48 @@ Each instance is a full clone of `omeka-s-docker` with its own `.env`, Docker vo
 
 ## Prerequisites
 
-- **Control machine**: Ansible 2.15+ with Python 3.10+
+- **Control machine**: Ubuntu 22.04+, Debian 12+, or WSL2 with Python 3.10+
 - **Target servers**: Ubuntu 22.04+ or Debian 12+
 - **SSH access** to target servers (key-based recommended)
 
 ## Quick Start
 
-### 1. Install Ansible collections
+### 1. Install Ansible
+
+**Ubuntu / Debian:**
+
+```bash
+sudo apt update && sudo apt install -y ansible
+```
+
+**pip (any platform):**
+
+```bash
+pip install ansible
+```
+
+Verify the installation:
+
+```bash
+ansible --version   # should show 2.15+
+```
+
+### 2. Install required Ansible collections
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
 ```
 
-### 2. Configure inventory
+This installs `community.docker`, `community.general`, and `ansible.posix`.
+
+### 3. Clone this repository
+
+```bash
+git clone https://github.com/AM-Digital-Research-Environment/am-omeka-s-ansible.git
+cd am-omeka-s-ansible
+```
+
+### 4. Configure inventory
 
 Copy and edit the example inventory:
 
@@ -53,7 +82,7 @@ vim inventories/production/host_vars/server1/vault.yml
 ansible-vault encrypt inventories/production/host_vars/server1/vault.yml
 ```
 
-### 3. Run full deployment
+### 5. Run full deployment
 
 ```bash
 ansible-playbook playbooks/site.yml -i inventories/production --limit server1
@@ -155,6 +184,35 @@ ansible-playbook playbooks/site.yml --ask-vault-pass
 # Or use a password file
 ansible-playbook playbooks/site.yml --vault-password-file .vault_pass
 ```
+
+## Web UI (Semaphore)
+
+A `docker-compose.semaphore.yml` is included to run [Semaphore UI](https://semaphoreui.com/) — a web interface for running playbooks, managing inventories, viewing run history, and scheduling tasks.
+
+### Setup
+
+```bash
+# Copy and edit environment file
+cp .env.example .env
+vim .env   # set passwords, admin email, encryption key
+
+# Generate an encryption key
+head -c 32 /dev/urandom | base64
+# Paste the output as SEMAPHORE_ACCESS_KEY_ENCRYPTION in .env
+
+# Start Semaphore
+docker compose -f docker-compose.semaphore.yml up -d
+```
+
+Open `http://<server-ip>:3000` and log in with credentials from `.env`.
+
+### Connecting to this repo in Semaphore
+
+1. **Key Store** — add SSH keys or vault passwords
+2. **Repositories** — point to this repo (local path or Git URL)
+3. **Inventory** — select `inventories/production/hosts.yml`
+4. **Environment** — set any extra variables
+5. **Task Templates** — create templates for each playbook (e.g. `playbooks/site.yml`)
 
 ## Verification
 

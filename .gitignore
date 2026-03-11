@@ -5,6 +5,9 @@ vault_pass.txt
 # Retry files
 *.retry
 
+# Environment file (contains Semaphore secrets)
+.env
+
 # Inventory secrets (encrypted files are OK, but be safe)
 # vault.yml files are committed (they're encrypted), but plaintext secrets are not
 *.secret
