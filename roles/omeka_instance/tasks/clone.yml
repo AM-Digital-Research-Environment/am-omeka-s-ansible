@@ -16,6 +16,16 @@
     mode: "0755"
   become: true
 
+- name: "{{ instance_name }} | Debug connection target"
+  ansible.builtin.command: hostname
+  become: true
+  register: _hostname
+  changed_when: false
+
+- name: "{{ instance_name }} | Show connection info"
+  ansible.builtin.debug:
+    msg: "Running on: {{ _hostname.stdout }} | Connection: {{ ansible_connection | default('unknown') }}"
+
 - name: "{{ instance_name }} | Clone or update omeka-s-docker repository"
   ansible.builtin.git:
     repo: "{{ omeka_docker_repo }}"
@@ -24,3 +34,13 @@
     force: false
     update: true
   become: true
+
+- name: "{{ instance_name }} | List cloned directory contents"
+  ansible.builtin.command: ls -la {{ omeka_instances_dir }}/{{ instance_name }}/
+  become: true
+  register: _dir_list
+  changed_when: false
+
+- name: "{{ instance_name }} | Show directory contents"
+  ansible.builtin.debug:
+    var: _dir_list.stdout_lines

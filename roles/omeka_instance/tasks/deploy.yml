@@ -2,16 +2,25 @@
 # roles/omeka_instance/tasks/deploy.yml
 # Build and start the Docker Compose stack for the instance.
 
-- name: "{{ instance_name }} | Verify instance directory exists"
-  ansible.builtin.stat:
-    path: "{{ omeka_instances_dir }}/{{ instance_name }}/docker-compose.yml"
-  register: _compose_file
+- name: "{{ instance_name }} | Check for compose files"
+  ansible.builtin.find:
+    paths: "{{ omeka_instances_dir }}/{{ instance_name }}"
+    patterns:
+      - "docker-compose.yml"
+      - "docker-compose.yaml"
+      - "compose.yml"
+      - "compose.yaml"
+  register: _compose_files
   become: true
 
-- name: "{{ instance_name }} | Fail if docker-compose.yml not found"
+- name: "{{ instance_name }} | Show found compose files"
+  ansible.builtin.debug:
+    msg: "Found compose files: {{ _compose_files.files | map(attribute='path') | list }}"
+
+- name: "{{ instance_name }} | Fail if no compose file found"
   ansible.builtin.fail:
-    msg: "docker-compose.yml not found at {{ omeka_instances_dir }}/{{ instance_name }}/"
-  when: not _compose_file.stat.exists
+    msg: "No docker-compose.yml or compose.yml found at {{ omeka_instances_dir }}/{{ instance_name }}/"
+  when: _compose_files.matched == 0
 
 - name: "{{ instance_name }} | Build Docker images"
   ansible.builtin.command:
