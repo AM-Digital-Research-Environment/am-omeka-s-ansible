@@ -2,18 +2,22 @@
 # roles/omeka_instance/tasks/clone.yml
 # Create instance directory and clone/update the omeka-s-docker repository.
 
-- name: "{{ instance_name }} | Check if instance path exists"
+- name: "{{ instance_name }} | Check if instance path exists before clone"
   ansible.builtin.stat:
     path: "{{ omeka_instances_dir }}/{{ instance_name }}"
   become: true
-  register: _instance_path
+  register: _pre_clone_path
+
+- name: "{{ instance_name }} | Pre-clone state"
+  ansible.builtin.debug:
+    msg: "Path exists: {{ _pre_clone_path.stat.exists }} | isdir: {{ _pre_clone_path.stat.isdir | default('N/A') }} | isreg: {{ _pre_clone_path.stat.isreg | default('N/A') }} | islnk: {{ _pre_clone_path.stat.islnk | default('N/A') }}"
 
 - name: "{{ instance_name }} | Remove stale instance path if not a directory"
   ansible.builtin.file:
     path: "{{ omeka_instances_dir }}/{{ instance_name }}"
     state: absent
   become: true
-  when: _instance_path.stat.exists and not _instance_path.stat.isdir
+  when: _pre_clone_path.stat.exists and not (_pre_clone_path.stat.isdir | default(false))
 
 - name: "{{ instance_name }} | Ensure instances base directory exists"
   ansible.builtin.file:
@@ -30,20 +34,44 @@
     force: false
     update: true
   become: true
+  register: _git_result
 
-- name: "{{ instance_name }} | Verify docker-compose.yml exists after clone"
+- name: "{{ instance_name }} | Git clone result"
+  ansible.builtin.debug:
+    msg: "Git changed: {{ _git_result.changed }} | before: {{ _git_result.before | default('none') }} | after: {{ _git_result.after | default('none') }}"
+
+- name: "{{ instance_name }} | Check instance dir after clone"
+  ansible.builtin.stat:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}"
+  become: true
+  register: _post_clone_dir
+
+- name: "{{ instance_name }} | Check .git dir after clone"
+  ansible.builtin.stat:
+    path: "{{ omeka_instances_dir }}/{{ instance_name }}/.git"
+  become: true
+  register: _post_clone_git
+
+- name: "{{ instance_name }} | Check docker-compose.yml after clone"
   ansible.builtin.stat:
     path: "{{ omeka_instances_dir }}/{{ instance_name }}/docker-compose.yml"
   become: true
-  register: _compose_file
+  register: _post_clone_compose
 
-- name: "{{ instance_name }} | Show clone result"
+- name: "{{ instance_name }} | Post-clone diagnostics"
   ansible.builtin.debug:
-    msg: "Clone path: {{ omeka_instances_dir }}/{{ instance_name }} | docker-compose.yml exists: {{ _compose_file.stat.exists }}"
+    msg: >-
+      Dir exists: {{ _post_clone_dir.stat.exists }} |
+      Dir isdir: {{ _post_clone_dir.stat.isdir | default('N/A') }} |
+      .git exists: {{ _post_clone_git.stat.exists }} |
+      docker-compose.yml exists: {{ _post_clone_compose.stat.exists }}
 
-- name: "{{ instance_name }} | Fail if docker-compose.yml not found after clone"
+- name: "{{ instance_name }} | Fail if clone did not produce expected files"
   ansible.builtin.fail:
     msg: >-
-      docker-compose.yml not found at {{ omeka_instances_dir }}/{{ instance_name }}/.
-      The git clone may have failed silently. Check repo URL: {{ omeka_docker_repo }}
-  when: not _compose_file.stat.exists
+      Git clone did not produce expected files.
+      Dir isdir={{ _post_clone_dir.stat.isdir | default(false) }},
+      .git={{ _post_clone_git.stat.exists }},
+      docker-compose.yml={{ _post_clone_compose.stat.exists }}.
+      Repo: {{ omeka_docker_repo }}, Branch: {{ omeka_docker_branch }}
+  when: not _post_clone_compose.stat.exists
