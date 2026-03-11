@@ -4,7 +4,6 @@
 # Called from manage-modules.yml with loop_var: mod_name
 #
 # Uses ONLY file-management modules for Semaphore compatibility.
-# No shell, command, raw, tempfile, or docker exec.
 
 - name: "{{ mod_name }} | Validate module is known"
   ansible.builtin.assert:
@@ -15,7 +14,8 @@
 - name: "{{ mod_name }} | Set paths"
   ansible.builtin.set_fact:
     _vol_modules_path: "/var/lib/docker/volumes/{{ instance }}_omeka_files/_data/modules"
-    _staging_dir: "{{ omeka_instances_dir }}/{{ instance }}/.module_staging/{{ mod_name }}"
+    _dl_dest: "/tmp/omeka_module_{{ mod_name }}.zip"
+    _extract_dest: "/tmp/omeka_module_{{ mod_name }}_extracted"
 
 - name: "{{ mod_name }} | Check if already installed"
   ansible.builtin.stat:
@@ -47,18 +47,12 @@
         _mod_repo: "{{ module_sources[mod_name].repo }}"
         _mod_branch: "{{ module_sources[mod_name].branch }}"
 
-    - name: "{{ mod_name }} | Create staging directory"
-      ansible.builtin.file:
-        path: "{{ _staging_dir }}"
-        state: directory
-        mode: "0755"
-      become: true
-
     - name: "{{ mod_name }} | Download module archive"
       ansible.builtin.get_url:
         url: "https://github.com/{{ _mod_repo }}/archive/refs/heads/{{ _mod_branch }}.zip"
-        dest: "{{ _staging_dir }}/module.zip"
+        dest: "{{ _dl_dest }}"
         mode: "0644"
+        force: true
       become: true
       register: _mod_download
       ignore_errors: true
@@ -66,21 +60,35 @@
     - name: "{{ mod_name }} | Try tag download if branch failed"
       ansible.builtin.get_url:
         url: "https://github.com/{{ _mod_repo }}/archive/refs/tags/{{ _mod_branch }}.zip"
-        dest: "{{ _staging_dir }}/module.zip"
+        dest: "{{ _dl_dest }}"
         mode: "0644"
+        force: true
       become: true
       when: _mod_download is failed
 
+    - name: "{{ mod_name }} | Ensure clean extract directory"
+      ansible.builtin.file:
+        path: "{{ _extract_dest }}"
+        state: absent
+      become: true
+
+    - name: "{{ mod_name }} | Create extract directory"
+      ansible.builtin.file:
+        path: "{{ _extract_dest }}"
+        state: directory
+        mode: "0755"
+      become: true
+
     - name: "{{ mod_name }} | Extract archive"
       ansible.builtin.unarchive:
-        src: "{{ _staging_dir }}/module.zip"
-        dest: "{{ _staging_dir }}"
+        src: "{{ _dl_dest }}"
+        dest: "{{ _extract_dest }}"
         remote_src: true
       become: true
 
     - name: "{{ mod_name }} | Find extracted directory"
       ansible.builtin.find:
-        paths: "{{ _staging_dir }}"
+        paths: "{{ _extract_dest }}"
         file_type: directory
         recurse: false
       register: _mod_extracted
@@ -88,7 +96,8 @@
 
     - name: "{{ mod_name }} | Identify extracted folder"
       ansible.builtin.set_fact:
-        _mod_src_dir: "{{ (_mod_extracted.files | rejectattr('path', 'equalto', _staging_dir) | first).path }}"
+        _mod_src_dir: "{{ _mod_extracted.files[0].path }}"
+      when: _mod_extracted.files | length > 0
 
     - name: "{{ mod_name }} | Copy module to Docker volume"
       ansible.builtin.copy:
@@ -100,12 +109,15 @@
         mode: "0775"
       become: true
 
-    - name: "{{ mod_name }} | Clean up staging directory"
+    - name: "{{ mod_name }} | Clean up download"
       ansible.builtin.file:
-        path: "{{ omeka_instances_dir }}/{{ instance }}/.module_staging"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "{{ _dl_dest }}"
+        - "{{ _extract_dest }}"
       become: true
 
     - name: "{{ mod_name }} | Module installed"
       ansible.builtin.debug:
-        msg: "Module {{ mod_name }} installed to {{ _vol_modules_path }}/{{ mod_name }}/. Activate it in Omeka S admin."
+        msg: "Module {{ mod_name }} installed. Activate it in Omeka S admin panel."
