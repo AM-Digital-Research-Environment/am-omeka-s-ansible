@@ -6,7 +6,6 @@
   community.docker.docker_compose_v2:
     project_src: "{{ omeka_instances_dir }}/{{ instance_name }}"
     state: present
-    build: always
     pull: always
   become: true
   register: _docker_compose
