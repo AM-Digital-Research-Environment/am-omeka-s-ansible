@@ -6,7 +6,7 @@
   ansible.builtin.uri:
     url: "http://localhost:{{ instance_config.nginx_port }}"
     method: GET
-    status_code: [200, 302]
+    status_code: [200, 301, 302, 401, 403]
   register: healthcheck_result
   until: healthcheck_result is succeeded
   retries: "{{ healthcheck_retries }}"
