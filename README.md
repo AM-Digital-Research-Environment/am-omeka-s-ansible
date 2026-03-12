@@ -139,6 +139,8 @@ omeka_instance_secrets:
 
 See [docs/MODULES_AND_THEMES.md](docs/MODULES_AND_THEMES.md) for the full module/theme management guide — available modules, dependencies, per-instance configuration, and usage via Semaphore or CLI.
 
+See [docs/UPDATING_OMEKA.md](docs/UPDATING_OMEKA.md) for the Omeka S core update process — version targeting, automatic backups, rollback, and troubleshooting.
+
 ## Roles
 
 | Role | Purpose |
