@@ -34,19 +34,18 @@
       become: true
       register: update_result
       changed_when: "'updated' in update_result.stdout or 'Updated' in update_result.stdout"
+      check_mode: false
 
     - name: Show update output
       ansible.builtin.debug:
         var: update_result.stdout_lines
 
     - name: Rebuild and restart containers
-      community.docker.docker_compose_v2:
-        project_src: "{{ _instance_dir }}"
-        state: present
-        pull: always
-        wait: true
-        wait_timeout: 120
-      become: true
+      ansible.builtin.shell:
+        cmd: docker compose down && docker compose up -d --build
+        chdir: "{{ _instance_dir }}"
+      changed_when: true
+      check_mode: false
 
     - name: Wait for instance to be healthy
       ansible.builtin.uri:
