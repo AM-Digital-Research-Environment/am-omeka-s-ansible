@@ -38,17 +38,20 @@
       ansible.builtin.shell: docker compose down
       args:
         chdir: "{{ _instance_dir }}"
+      check_mode: false
 
     - name: Read MySQL password from .env
       ansible.builtin.shell: grep '^MYSQL_PASSWORD=' "{{ _instance_dir }}/.env" | cut -d= -f2
       register: mysql_pass
       changed_when: false
       no_log: true
+      check_mode: false
 
     - name: Start only the database container
       ansible.builtin.shell: docker compose up -d db
       args:
         chdir: "{{ _instance_dir }}"
+      check_mode: false
 
     - name: Wait for database to be ready
       ansible.builtin.shell: |
@@ -61,6 +64,7 @@
       delay: 2
       changed_when: false
       no_log: true
+      check_mode: false
 
     - name: Restore database from backup
       ansible.builtin.shell: |
@@ -69,6 +73,7 @@
       args:
         chdir: "{{ _instance_dir }}"
       no_log: true
+      check_mode: false
 
     - name: Get omeka_files volume name
       ansible.builtin.shell: |
@@ -77,12 +82,14 @@
         chdir: "{{ _instance_dir }}"
       register: volume_name
       changed_when: false
+      check_mode: false
 
     - name: Get full volume name with project prefix
       ansible.builtin.shell: |
         docker volume ls --format '{{ '{{' }}.Name{{ '}}' }}' | grep "{{ instance | regex_replace('-', '') }}.*{{ volume_name.stdout | trim }}" | head -1
       register: full_volume_name
       changed_when: false
+      check_mode: false
 
     - name: Restore files volume from backup
       ansible.builtin.shell: |
@@ -90,11 +97,13 @@
           -v "{{ full_volume_name.stdout | trim }}:/data" \
           -v "{{ _backup_dir }}:/backup:ro" \
           alpine sh -c "rm -rf /data/* && tar xzf /backup/{{ _files_backup }} -C /data"
+      check_mode: false
 
     - name: Start all containers
       ansible.builtin.shell: docker compose up -d
       args:
         chdir: "{{ _instance_dir }}"
+      check_mode: false
 
     - name: Wait for instance to be healthy
       ansible.builtin.uri:

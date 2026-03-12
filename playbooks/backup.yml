@@ -18,3 +18,4 @@
       when: item.value.backup_enabled | default(false)
       register: backup_result
       changed_when: backup_result.rc == 0
+      check_mode: false
