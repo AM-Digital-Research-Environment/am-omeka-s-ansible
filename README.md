@@ -85,7 +85,7 @@ ansible-vault encrypt inventories/production/host_vars/server1/vault.yml
 ### 5. Run full deployment
 
 ```bash
-ansible-playbook playbooks/site.yml -i inventories/production --limit server1
+ansible-playbook playbooks/site.yml -i inventories/production --limit server1 --ask-vault-pass
 ```
 
 ## Instance Configuration
@@ -135,6 +135,7 @@ omeka_instance_secrets:
 | `manage-themes.yml` | Install/update themes | `-e "instance=archives-main themes=cozy"` (update: `theme_action=update`) |
 | `backup.yml` | Run backups for enabled instances | `--limit server1` |
 | `restore.yml` | Restore from backup | `-e "instance=archives-main backup_date=2026-03-11_020000"` |
+| `status.yml` | Show status of all instances | `--limit server1` |
 | `teardown-instance.yml` | Remove instance (requires confirmation) | `-e "instance=old-site confirm_teardown=yes"` |
 
 See [docs/MODULES_AND_THEMES.md](docs/MODULES_AND_THEMES.md) for the full module/theme management guide — available modules, dependencies, per-instance configuration, and usage via Semaphore or CLI.

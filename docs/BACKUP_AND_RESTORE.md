@@ -22,7 +22,7 @@ Backups are stored on the server at:
 
 ## Enabling Backups
 
-Backups must be enabled per instance in the Semaphore inventory. See [INVENTORY.md](INVENTORY.md) for full details.
+Backups must be enabled per instance in the inventory (either the file-based inventory under `inventories/` or a Semaphore static inventory). See [INVENTORY.md](INVENTORY.md) for full details.
 
 ```yaml
 omeka_instances:
@@ -149,7 +149,7 @@ The backup directory hasn't been created yet. Run **Deploy All Instances** first
 
 ### "omeka-backup.sh: not found"
 
-Same fix — the backup script is deployed by the backup role during **Deploy All Instances** or **Server Setup**.
+The backup script is deployed by the backup role during **Deploy All Instances** (or `site.yml`, which includes it). Run one of those playbooks first.
 
 ### "MYSQL_PASSWORD not found"
 

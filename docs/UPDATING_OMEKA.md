@@ -4,7 +4,7 @@ How to update the Omeka S core version for a specific instance.
 
 ## How It Works
 
-The update process runs inside the PHP container via `scripts/update-omeka.sh` (from the [omeka-s-docker](https://github.com/AM-Digital-Research-Environment/omeka-s-docker) repo). It performs 14 steps:
+The update process runs inside the PHP container via `scripts/update-omeka.sh` (from the [omeka-s-docker](https://github.com/AM-Digital-Research-Environment/omeka-s-docker) repo). The key steps are:
 
 1. Creates a timestamped backup of `/config`, `/modules`, and `/themes`
 2. Downloads the target Omeka S release from GitHub

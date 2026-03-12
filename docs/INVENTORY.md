@@ -1,10 +1,13 @@
 # Inventory Configuration
 
-How to configure the Semaphore inventory to define instances, secrets, and per-instance settings.
+How to configure the inventory to define instances, secrets, and per-instance settings.
 
 ## Inventory Structure
 
-The inventory is a static YAML file configured in Semaphore under **Inventory**. It defines which servers to manage and what Omeka S instances to run on each.
+The inventory defines which servers to manage and what Omeka S instances to run on each. It uses the same YAML format whether you use:
+
+- **File-based inventory** (under `inventories/production/` or `inventories/staging/`) — edit files directly and run playbooks from the CLI
+- **Semaphore static inventory** — paste the YAML into Semaphore's **Inventory** configuration
 
 ```yaml
 all:
