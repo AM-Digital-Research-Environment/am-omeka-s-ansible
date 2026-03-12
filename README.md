@@ -99,7 +99,7 @@ omeka_instances:
     omeka_version: "4.2.0"
     nginx_port: 8081
     extra_modules: [AdvancedSearch, IiifServer]
-    extra_themes: [ColorMe]
+    extra_themes: [cozy]
     php_pm_max_children: 15
     backup_enabled: true
     backup_schedule: "0 2 * * *"
@@ -132,7 +132,7 @@ omeka_instance_secrets:
 | `deploy-all-instances.yml` | Deploy all instances on target hosts | `--limit server1` |
 | `update-omeka.yml` | Update Omeka S core | `-e "instance=archives-main target_version=4.3.0"` |
 | `manage-modules.yml` | Install/update modules | `-e "instance=archives-main modules=CSVImport,UniversalViewer"` (update: `module_action=update`) |
-| `manage-themes.yml` | Install/update themes | `-e "instance=archives-main themes=ColorMe"` (update: `theme_action=update`) |
+| `manage-themes.yml` | Install/update themes | `-e "instance=archives-main themes=cozy"` (update: `theme_action=update`) |
 | `backup.yml` | Run backups for enabled instances | `--limit server1` |
 | `restore.yml` | Restore from backup | `-e "instance=archives-main backup_date=2026-03-11_020000"` |
 | `teardown-instance.yml` | Remove instance (requires confirmation) | `-e "instance=old-site confirm_teardown=yes"` |

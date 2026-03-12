@@ -12,7 +12,7 @@ omeka_instances:
       - AdvancedSearch
       - IiifServer
     extra_themes:
-      - ColorMe
+      - cozy
     php_pm_max_children: 15
     backup_enabled: true
     backup_schedule: "0 2 * * *"

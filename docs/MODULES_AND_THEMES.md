@@ -56,13 +56,13 @@ ansible-playbook playbooks/manage-modules.yml \
 Same pattern, using the **Install Themes** task template (or `manage-themes.yml`):
 
 ```
--e "instance=test-instance themes=ColorMe"
+-e "instance=test-instance themes=cozy"
 ```
 
 Update:
 
 ```
--e "instance=test-instance themes=ColorMe theme_action=update"
+-e "instance=test-instance themes=cozy theme_action=update"
 ```
 
 ## Available Modules (Short Names)
@@ -127,8 +127,20 @@ These are installed automatically on every instance by the entrypoint:
 
 ### Default Themes (Pre-installed)
 
+- default
 - Freedom
 - Lively
+
+### Available Extra Themes
+
+All themes from the [omeka-s-themes](https://github.com/omeka-s-themes) GitHub organization can be installed by name:
+
+| Theme | Description |
+|-------|-------------|
+| cozy | Off-canvas navigation menu |
+| foundation | Based on ZURB Foundation |
+| papers | Based on Papers of the War Department |
+| thedaily | Bold sans-serifs with bright color accents |
 
 ## Custom Modules (Not in Registry)
 
@@ -172,7 +184,7 @@ omeka_instances:
       - EasyAdmin
       - CSSEditor
     extra_themes:
-      - ColorMe
+      - cozy
 ```
 
 These are written to `.env` via the `env.j2` template during `deploy-instance.yml` and installed by the entrypoint on first container start.

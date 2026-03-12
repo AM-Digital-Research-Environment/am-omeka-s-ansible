@@ -7,11 +7,11 @@
 #
 # Install:
 #   ansible-playbook playbooks/manage-themes.yml \
-#     -e "instance=test-instance themes=ColorMe,CenterRow"
+#     -e "instance=test-instance themes=cozy,foundation"
 #
 # Update:
 #   ansible-playbook playbooks/manage-themes.yml \
-#     -e "instance=test-instance themes=ColorMe theme_action=update"
+#     -e "instance=test-instance themes=cozy theme_action=update"
 # =============================================================================
 
 - name: Manage Omeka S themes
