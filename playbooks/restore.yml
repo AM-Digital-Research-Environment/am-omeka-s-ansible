@@ -79,21 +79,15 @@
       no_log: true
       check_mode: false
 
-    - name: Get omeka_files volume name
+    - name: Get full volume name for omeka_files
       ansible.builtin.shell: |
-        docker compose config --volumes | grep omeka_files || echo "omeka_files"
+        docker volume ls --format '{% raw %}{{.Name}}{% endraw %}' | grep '^{{ instance }}.*_omeka_files$' | head -1
       args:
         chdir: "{{ _instance_dir }}"
-      register: volume_name
-      changed_when: false
-      check_mode: false
-
-    - name: Get full volume name with project prefix
-      ansible.builtin.shell: |
-        docker volume ls --format '{{ '{{' }}.Name{{ '}}' }}' | grep "{{ instance | regex_replace('-', '') }}.*{{ volume_name.stdout | trim }}" | head -1
       register: full_volume_name
       changed_when: false
       check_mode: false
+      failed_when: full_volume_name.stdout | trim == ''
 
     - name: Restore files volume from backup
       ansible.builtin.shell: |
