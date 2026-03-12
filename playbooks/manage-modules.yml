@@ -57,6 +57,7 @@
           echo 'EXTRA_MODULES={{ _all_extra_modules | join(",") }}' >> .env
         chdir: "{{ _instance_dir }}"
       changed_when: true
+      check_mode: false
 
     # --- Step 2: For updates, remove module dirs so entrypoint re-downloads ---
     - name: "Remove module directories for update"
@@ -73,6 +74,7 @@
         cmd: docker compose down && docker compose up -d
         chdir: "{{ _instance_dir }}"
       changed_when: true
+      check_mode: false
 
     # --- Step 4: Health check ---
     - name: Wait for instance to be healthy

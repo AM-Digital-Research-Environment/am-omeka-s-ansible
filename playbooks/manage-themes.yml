@@ -57,6 +57,7 @@
           echo 'EXTRA_THEMES={{ _all_extra_themes | join(",") }}' >> .env
         chdir: "{{ _instance_dir }}"
       changed_when: true
+      check_mode: false
 
     # --- Step 2: For updates, remove theme dirs so entrypoint re-downloads ---
     - name: "Remove theme directories for update"
@@ -73,6 +74,7 @@
         cmd: docker compose down && docker compose up -d
         chdir: "{{ _instance_dir }}"
       changed_when: true
+      check_mode: false
 
     # --- Step 4: Health check ---
     - name: Wait for instance to be healthy
