@@ -141,6 +141,8 @@ See [docs/MODULES_AND_THEMES.md](docs/MODULES_AND_THEMES.md) for the full module
 
 See [docs/UPDATING_OMEKA.md](docs/UPDATING_OMEKA.md) for the Omeka S core update process — version targeting, automatic backups, rollback, and troubleshooting.
 
+See [docs/INVENTORY.md](docs/INVENTORY.md) for inventory configuration — instance definitions, secrets, PHP-FPM tuning, backup schedules, and multi-server setup.
+
 ## Roles
 
 | Role | Purpose |
