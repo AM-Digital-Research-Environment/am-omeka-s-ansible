@@ -4,7 +4,7 @@
 
 - name: restart omeka instance
   ansible.builtin.shell:
-    cmd: docker compose restart
+    cmd: docker compose down && docker compose up -d
     chdir: "{{ omeka_instances_dir }}/{{ instance_name }}"
   listen: restart omeka instance
   changed_when: false

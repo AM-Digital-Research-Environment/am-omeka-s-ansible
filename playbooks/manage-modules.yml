@@ -49,25 +49,14 @@
 
   tasks:
     # --- Step 1: Update .env to include EXTRA_MODULES ---
-    - name: Read current .env file
-      ansible.builtin.slurp:
-        src: "{{ _instance_dir }}/.env"
-      register: _current_env
-
-    - name: Filter out old EXTRA_MODULES line and build new content
-      ansible.builtin.set_fact:
-        _clean_lines: >-
-          {{ (_current_env.content | b64decode).split('\n')
-             | reject('match', '^EXTRA_MODULES=')
-             | reject('match', '^\s*$')
-             | list }}
-        _extra_modules_line: "EXTRA_MODULES={{ _all_extra_modules | join(',') }}"
-
-    - name: Write updated .env file
-      ansible.builtin.copy:
-        content: "{{ (_clean_lines + [_extra_modules_line]) | join('\n') }}\n"
-        dest: "{{ _instance_dir }}/.env"
-        mode: "0600"
+    # Uses shell instead of copy/lineinfile to avoid Semaphore ghost-write issues
+    - name: Update EXTRA_MODULES in .env
+      ansible.builtin.shell:
+        cmd: |
+          sed -i '/^EXTRA_MODULES=/d' .env
+          echo 'EXTRA_MODULES={{ _all_extra_modules | join(",") }}' >> .env
+        chdir: "{{ _instance_dir }}"
+      changed_when: true
 
     # --- Step 2: For updates, remove module dirs so entrypoint re-downloads ---
     - name: "Remove module directories for update"
@@ -78,14 +67,12 @@
       when: module_action == 'update'
 
     # --- Step 3: Recreate containers to trigger entrypoint ---
+    # Uses shell down/up instead of docker_compose_v2 to avoid Semaphore ghost-recreate
     - name: Recreate containers to trigger module installation
-      community.docker.docker_compose_v2:
-        project_src: "{{ _instance_dir }}"
-        state: present
-        pull: never
-        recreate: always
-        wait: true
-        wait_timeout: 300
+      ansible.builtin.shell:
+        cmd: docker compose down && docker compose up -d
+        chdir: "{{ _instance_dir }}"
+      changed_when: true
 
     # --- Step 4: Health check ---
     - name: Wait for instance to be healthy
