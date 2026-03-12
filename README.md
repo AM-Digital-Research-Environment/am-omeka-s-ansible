@@ -143,6 +143,8 @@ See [docs/UPDATING_OMEKA.md](docs/UPDATING_OMEKA.md) for the Omeka S core update
 
 See [docs/INVENTORY.md](docs/INVENTORY.md) for inventory configuration — instance definitions, secrets, PHP-FPM tuning, backup schedules, and multi-server setup.
 
+See [docs/BACKUP_AND_RESTORE.md](docs/BACKUP_AND_RESTORE.md) for backup and restore — automated schedules, manual backups, restoring from backup, and remote sync.
+
 ## Roles
 
 | Role | Purpose |
