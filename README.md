@@ -131,8 +131,8 @@ omeka_instance_secrets:
 | `deploy-instance.yml` | Deploy single instance | `-e "instance=archives-main"` |
 | `deploy-all-instances.yml` | Deploy all instances on target hosts | `--limit server1` |
 | `update-omeka.yml` | Update Omeka S core | `-e "instance=archives-main target_version=4.3.0"` |
-| `manage-modules.yml` | Install/update modules | `-e "instance=archives-main action=install modules=CSVImport,UniversalViewer"` |
-| `manage-themes.yml` | Install/update themes | `-e "instance=archives-main action=install themes=ColorMe"` |
+| `manage-modules.yml` | Install/update modules | `-e "instance=archives-main modules=CSVImport,UniversalViewer"` (update: `module_action=update`) |
+| `manage-themes.yml` | Install/update themes | `-e "instance=archives-main themes=ColorMe"` (update: `theme_action=update`) |
 | `backup.yml` | Run backups for enabled instances | `--limit server1` |
 | `restore.yml` | Restore from backup | `-e "instance=archives-main backup_date=2026-03-11_020000"` |
 | `teardown-instance.yml` | Remove instance (requires confirmation) | `-e "instance=old-site confirm_teardown=yes"` |
@@ -300,9 +300,9 @@ Use **CLI args** to add `--check` for dry runs or `--diff` to see changes.
 
 Ansible treats `localhost` specially and forces `connection: local`, causing tasks to run inside the Semaphore container instead of on the remote server. Use any other hostname (e.g., `myserver`, `sandbox`) with `ansible_host: <ip>`.
 
-### Shell/command/raw modules skip in Semaphore
+### Shell/command tasks skip in Semaphore
 
-The `ansible.builtin.shell`, `ansible.builtin.command`, and `ansible.builtin.raw` modules silently skip tasks when running via Semaphore. All roles use only declarative modules (`stat`, `file`, `git`, `template`, `community.docker.docker_compose_v2`, etc.) to avoid this issue.
+Semaphore may silently enable Ansible check mode, which causes `ansible.builtin.shell` and `ansible.builtin.command` tasks to be skipped (Ansible cannot predict their outcome in check mode). Declarative modules like `copy` and `docker_compose_v2` appear to succeed in check mode but produce no actual changes ("ghost writes"). To work around this, shell tasks that must always execute use `check_mode: false`.
 
 ### Disk space
 
