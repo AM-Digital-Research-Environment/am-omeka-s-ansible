@@ -137,6 +137,8 @@ omeka_instance_secrets:
 | `restore.yml` | Restore from backup | `-e "instance=archives-main backup_date=2026-03-11_020000"` |
 | `teardown-instance.yml` | Remove instance (requires confirmation) | `-e "instance=old-site confirm_teardown=yes"` |
 
+See [docs/MODULES_AND_THEMES.md](docs/MODULES_AND_THEMES.md) for the full module/theme management guide — available modules, dependencies, per-instance configuration, and usage via Semaphore or CLI.
+
 ## Roles
 
 | Role | Purpose |
